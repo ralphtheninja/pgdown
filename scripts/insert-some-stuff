@@ -9,7 +9,7 @@ var client = new pg.Client(conString)
 client.connect(function (err) {
   if (err) throw err
   data.map(function (d) {
-    return client.query("insert into data(key, value) values('" + d.key + "', '" + JSON.stringify(d.value) + "')")
+    return client.query("insert into data(key, value) values($1, $2)", [ d.key, JSON.stringify(d.value) ])
   }).pop().on('end', function () {
     console.log('inserted %d elements', data.length)
     client.end()
