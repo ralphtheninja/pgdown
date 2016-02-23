@@ -1,7 +1,7 @@
 {
-  "name": "postgresdown",
+  "name": "pgdown",
   "version": "0.0.0",
-  "description": "abstract-leveldown backed by postgres",
+  "description": "PostgreSQL backed abstract-leveldown",
   "main": "postgresdown.js",
   "scripts": {
     "test": "tape test | faucet && npm run lint",
@@ -10,11 +10,11 @@
   "keywords": [],
   "author": "Lars-Magnus Skog <ralphtheninja@riseup.net>",
   "license": "MIT",
-  "repository": "ralphtheninja/postgresdown",
+  "repository": "ralphtheninja/pgdown",
   "bugs": {
-    "url": "https://github.com/ralphtheninja/postgresdown/issues"
+    "url": "https://github.com/ralphtheninja/pgdown/issues"
   },
-  "homepage": "https://github.com/ralphtheninja/postgresdown#readme",
+  "homepage": "https://github.com/ralphtheninja/pgdown#readme",
   "dependencies": {
     "abstract-leveldown": "~2.4.1",
     "debug": "^2.2.0",
