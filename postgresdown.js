@@ -11,12 +11,18 @@ function PostgresDOWN (location) {
   }
 
   const parsed = url.parse(location)
+  debug('parsed %j', parsed)
   const path = parsed.path.split('/')
+  debug('path %j', path)
   this.database = path[1].toLowerCase()
+  debug('this.database %j', this.database)
 
   const tableName = this.tableName = path.pop() || 'p_d'
+  debug('tableName %j', tableName)
   const schemaName = this.schemaName = path.slice(2).join('__') || 'p_d'
+  debug('schemaName %j', schemaName)
   this.path = `"${schemaName}"."${tableName}"`
+  debug('this.path %j', this.path)
 
   // TODO: parse into connection obj
   // {
@@ -28,6 +34,7 @@ function PostgresDOWN (location) {
   // }
 
   parsed.path = '/' + this.database
+  debug('parsed %j', parsed)
   const uri = url.format(parsed)
 
   // TODO: use pg.pools
@@ -44,7 +51,12 @@ PostgresDOWN.prototype._open = function (options, cb) {
   const db = this
 
   function create (cb) {
+    debug(`creating database ${db.database}`)
+    debug(`creating schema ${db.schemaName}`)
+    debug(`creating table ${db.path}`)
+
     const sql = `
+      CREATE DATABASE IF NOT EXISTS "${db.database}";
       CREATE SCHEMA IF NOT EXISTS "${db.schemaName}";
       CREATE TABLE IF NOT EXISTS ${db.path} (
         key text PRIMARY KEY,
@@ -56,7 +68,10 @@ PostgresDOWN.prototype._open = function (options, cb) {
 
   debug('_open: creating client')
   client.connect(function (err) {
-    if (err) return cb(err)
+    if (err) {
+      debug(' client.connect error', err)
+      return cb(err)
+    }
 
     const errorIfExists = options.errorIfExists
     const createIfMissing = options.createIfMissing
@@ -134,8 +149,7 @@ PostgresDOWN.prototype._get = function (key, options, cb) {
     if (err) return cb(err)
     if (result.rows.length) {
       cb(null, result.rows[0].value)
-    }
-    else {
+    } else {
       cb(new errors.NotFoundError('key: ' + key))
     }
   })
