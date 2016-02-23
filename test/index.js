@@ -1,59 +1,96 @@
 const test = require('tape')
 const pgdown = require('../')
 const levelup = require('levelup')
+const xtend = require('xtend')
 
-function pgup (location) {
-  return levelup(location, {
+// TODO: get from config
+const DEFAULT_URI = 'postgres://dlandolt:@localhost:5432/pgdown_testdb/pgdown_test_table'
+
+function factory (location, options) {
+  if (typeof location === 'string') {
+    location = DEFAULT_URI
+    options = location
+  }
+
+  return levelup(location || DEFAULT_URI, xtend({
     db: pgdown,
     keyEncoding: 'utf8',
     valueEncoding: 'json'
-  })
+  }, options))
 }
 
-const uri = 'postgres://dlandolt:@localhost:5432/postgresdown'
-const db = pgup(uri)
+test('initialization', (t) => {
+  t.test('pgdown defaults', (t) => {
+    const db = pgdown(DEFAULT_URI)
+    t.ok(db.pg.client, 'client initialized')
+    // t.equal(db.pg.id, '""table_name"', 'default db id')
+    // t.equal(db.pg.id, '"nested__schema__path"."table_name"', 'db id w/ nested schema')
+    db.close(t.end)
+  })
+})
+
+// test('raw client queries', (t) => {
+//   const db = factory()
+//   db.open((err) => {
+//     if (err) return t.end(err)
+
+//     db.db.pg.client.query('DROP TABLE ${db.pg.id}', (err, result) => {
+//       console.warn(err, result)
+//       t.end(err)
+//     })
+//   })
+// })
+
+// test('open', (t) => {
+//   t.test('createIfMissing', (t) => {
+//     t.test('when true', (t) => {
+//       const db = factory({
+//         createIfMissing: true
+//       })
+//     })
+
+//     t.test('when false', (t) => {
+//       const db = factory({
+//         createIfMissing: false
+//       })
+//     })
+//   })
+// })
+
+var db = factory()
 
 test('open', (t) => {
-  db.open(function (err) {
-    if (err) return t.end(err)
-
-    // TODO: something nicer
-    db.db._client.query('SELECT NOW() AS "time"', (err, result) => {
-      if (err) return t.end(err)
-
-      t.equal(result.rows.length, 1)
-      t.ok(result.rows[0].time instanceof Date)
-
-      t.end()
-    })
+  db.open((err) => {
+    t.end(err)
   })
 })
 
 // TODO: drop table
-
-test('put', (t) => {
-  db.put('a', { str: 'foo', int: 123 }, function (err, result) {
-    if (err) return t.end(err)
-    t.ok(result == null, 'empty response')
-    t.end()
-  })
-})
-
-test('get', (t) => {
-  db.get('a', function (err, result) {
-    if (err) return t.end(err)
-    t.deepEqual(result, { str: 'foo', int: 123 })
-    t.end()
-  })
-})
-
-test('del', (t) => {
-  db.del('a', function (err, result) {
-    if (err) return t.end(err)
-    db.get('a', function (err, result) {
-      t.ok(err && err.notFound, 'not found')
+test('crud', (t) => {
+  t.test('put', (t) => {
+    db.put('a', { str: 'foo', int: 123 }, function (err, result) {
+      if (err) return t.end(err)
       t.ok(result == null, 'empty response')
       t.end()
+    })
+  })
+
+  t.test('get', (t) => {
+    db.get('a', function (err, result) {
+      if (err) return t.end(err)
+      t.deepEqual(result, { str: 'foo', int: 123 })
+      t.end()
+    })
+  })
+
+  t.test('del', (t) => {
+    db.del('a', function (err, result) {
+      if (err) return t.end(err)
+      db.get('a', function (err, result) {
+        t.ok(err && err.notFound, 'not found')
+        t.ok(result == null, 'empty response')
+        t.end()
+      })
     })
   })
 })
