@@ -36,6 +36,9 @@ function PostgresDOWN (location) {
   }
   debug('this.pg: %j', pgOpts)
 
+  // TODO: fix the sql to allow us to use extra path parts for schema name
+  if (schemaName) throw new Error('schema names NYI')
+
   // TODO: parse into connection obj
   // {
   //   user: ...,
