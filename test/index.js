@@ -1,35 +1,32 @@
 const test = require('tape')
-const postgresdown = require('../')
+const pgdown = require('../')
 const levelup = require('levelup')
 
-function factory (uri) {
-  return levelup(uri, {
-    db: postgresdown,
+function pgup (location) {
+  return levelup(location, {
+    db: pgdown,
     keyEncoding: 'utf8',
     valueEncoding: 'json'
   })
 }
 
 const uri = 'postgres://dlandolt:@localhost:5432/postgresdown'
-const db = factory(uri)
+const db = pgup(uri)
 
 test('open', (t) => {
-  // TODO
   db.open(function (err) {
-    t.end(err)
+    if (err) return t.end(err)
+
+    // TODO: something nicer
+    db.db._client.query('SELECT NOW() AS "time"', (err, result) => {
+      if (err) return t.end(err)
+
+      t.equal(result.rows.length, 1)
+      t.ok(result.rows[0].time instanceof Date)
+
+      t.end()
+    })
   })
-  // client.connect((err) => {
-  //   if (err) return t.end(err)
-
-  //   client.query('SELECT NOW() AS "time"', (err, result) => {
-  //     if (err) return t.end(err)
-
-  //     t.equal(result.rows.length, 1)
-  //     t.ok(result.rows[0].time instanceof Date)
-
-  //     t.end()
-  //   })
-  // })
 })
 
 // TODO: drop table

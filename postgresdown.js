@@ -12,17 +12,18 @@ function PostgresDOWN (location) {
 
   const parsed = url.parse(location)
   debug('parsed %j', parsed)
+
   const path = parsed.path.split('/')
   debug('path %j', path)
-  this.database = path[1].toLowerCase()
-  debug('this.database %j', this.database)
 
-  const tableName = this.tableName = path.pop() || 'p_d'
-  debug('tableName %j', tableName)
-  const schemaName = this.schemaName = path.slice(2).join('__') || 'p_d'
-  debug('schemaName %j', schemaName)
-  this.path = `"${schemaName}"."${tableName}"`
-  debug('this.path %j', this.path)
+  const config = this._pgConfig = {}
+  config.database = path.shift() || 'pgdown'
+  config.table = path.pop() || 'p_d'
+  config.schema = path.slice(2).join('__') || 'p_d'
+  debug('this._pgConfig %j', this._pgConfig)
+
+  this.ident = `"${config.schema}"."${config.table}"`
+  debug('this.ident %j', this.ident)
 
   // TODO: parse into connection obj
   // {
@@ -33,13 +34,12 @@ function PostgresDOWN (location) {
   //   database: '',
   // }
 
-  parsed.path = '/' + this.database
-  debug('parsed %j', parsed)
+  parsed.path = '/' + config.database
   const uri = url.format(parsed)
+  debug('creating pg client with uri', uri)
 
-  // TODO: use pg.pools
-  debug(`creating pg client with uri ${uri}`)
-  this.client = new pg.Client(uri)
+  // TODO: use pg.pools?
+  this._client = new pg.Client(uri)
 
   AbstractLevelDOWN.call(this, location)
 }
@@ -47,59 +47,49 @@ function PostgresDOWN (location) {
 inherits(PostgresDOWN, AbstractLevelDOWN)
 
 PostgresDOWN.prototype._open = function (options, cb) {
-  const client = this.client
-  const db = this
+  const client = this._client
+  const config = this._pgConfig
 
-  function create (cb) {
-    debug(`creating database ${db.database}`)
-    debug(`creating schema ${db.schemaName}`)
-    debug(`creating table ${db.path}`)
+  const errorIfExists = options.errorIfExists
+  const createIfMissing = options.createIfMissing
 
-    const sql = `
-      CREATE DATABASE IF NOT EXISTS "${db.database}";
-      CREATE SCHEMA IF NOT EXISTS "${db.schemaName}";
-      CREATE TABLE IF NOT EXISTS ${db.path} (
+  if (createIfMissing) {
+    const ifNotExists = errorIfExists ? '' : ' IF NOT EXISTS'
+
+    // TODO: something like:
+    //   `CREATE DATABASE${ifNotExists} "${config.database}";`
+
+    const CREATE_SQL = `
+      CREATE SCHEMA${ifNotExists} "${config.schema}";
+      CREATE TABLE${ifNotExists} "${config.table}" (
         key text PRIMARY KEY,
         value jsonb
-      );`
+      );
+    `
+    debug('_open: createIfMissing sql', CREATE_SQL)
 
-    client.query(sql, cb)
+    client.query(CREATE_SQL)
+  } else if (errorIfExists) {
+    // test for table existence
+    const EXISTS_SQL = `SELECT COUNT(*) from ${this.ident} LIMIT 1`
+    debug('_open: errorIfExists sql', EXISTS_SQL)
+
+    client.query(EXISTS_SQL)
   }
 
-  debug('_open: creating client')
-  client.connect(function (err) {
-    if (err) {
-      debug(' client.connect error', err)
-      return cb(err)
-    }
-
-    const errorIfExists = options.errorIfExists
-    const createIfMissing = options.createIfMissing
-
-    if (createIfMissing && !errorIfExists) return create(cb)
-
-    // TODO ...
-    // // check if rel path exists
-    // client.query(`SELECT to_regclass(${db.path});`, function (err, result) {
-    //   if (err) return cb(err)
-
-    //   if (result) {
-    //     if (errorIfExists) {
-    //       cb(new InitializationError('`' + db.path + '` already exists'))
-    //     } else {
-    //       cb()
-    //     }
-    //   } else {
-    //     createIfMissing ? create(cb) : cb()
-    //   }
-    // })
+  debug('_open: client connecting')
+  client.connect((err) => {
+    // TODO: errors.InitializationError?
+    debug('_open: client.connect error', err)
+    cb(err)
   })
 }
 
 PostgresDOWN.prototype._close = function (cb) {
   debug('_close: ending client')
+  // TODO: can this ever throw?
   try {
-    this.client.end()
+    this._client.end()
     process.nextTick(cb)
   } catch (err) {
     process.nextTick(function () {
@@ -109,19 +99,24 @@ PostgresDOWN.prototype._close = function (cb) {
 }
 
 PostgresDOWN.prototype._put = function (key, value, options, cb) {
-  const INSERT = `INSERT INTO ${this.path} (key,value) VALUES($1,$2)`
-  const QUERY = INSERT + ' ON CONFLICT (key) DO UPDATE SET value = excluded.value'
-  // const UPDATE = `UPDATE ${this.path} SET value = $2 WHERE key = $1'`
+  const INSERT = `INSERT INTO ${this.ident} (key,value) VALUES($1,$2)`
+  const UPSERT = INSERT + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
+  // const UPDATE = `UPDATE ${this.ident} SET value=($2) WHERE key=($1)'`
 
   // just an upsert for now
-  debug(`_put: ${QUERY}, ${key}, ${value}`)
-  this.client.query(QUERY, [ key, value ], function (err) {
-    if (err) return cb(err) // TODO: errors.WriteError?
+  const SQL = UPSERT
+  debug('_put: sql', SQL)
+
+  this._client.query(SQL, [ key, value ], function (err) {
+    // TODO: errors.WriteError?
+    debug('_put error', err)
+    if (err) return cb(err)
 
     cb()
   })
 
   // TODO: the below is a total shitshow -- probably not even worth bothering w/
+  // this tries to squeeze INSERT and UPDATE semantics from existing level opts
   // would errorIfMissing be more sensical?
 
   // if errorIfExists == false:
@@ -143,25 +138,25 @@ PostgresDOWN.prototype._put = function (key, value, options, cb) {
 
 PostgresDOWN.prototype._get = function (key, options, cb) {
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
-  const QUERY = `SELECT value::text FROM ${this.path}`
-  debug(`_get: ${QUERY}`)
-  this.client.query(QUERY, function (err, result) {
-    if (err) return cb(err)
-    if (result.rows.length) {
-      cb(null, result.rows[0].value)
-    } else {
-      cb(new errors.NotFoundError('key: ' + key))
-    }
+  const SQL = `SELECT value::text FROM ${this.ident}`
+  debug('_get: sql', SQL)
+
+  this._client.query(SQL, function (err, result) {
+    if (err) cb(err)
+    else if (result.rows.length) cb(null, result.rows[0].value)
+    else cb(new errors.NotFoundError('key: ' + key)) // TODO: better message
   })
 }
 
 PostgresDOWN.prototype._del = function (key, options, cb) {
-  const QUERY = `DELETE FROM ${this.path} WHERE key = $1`
-  debug(`_del: ${QUERY}`)
-  this.client.query(QUERY, [ key ], function (err, result) {
-    if (err) return cb(err) // TODO: errors.WriteError?
+  const SQL = `DELETE FROM ${this.ident} WHERE key = $1`
+  debug('_del: sql', SQL)
+
+  this._client.query(SQL, [ key ], function (err, result) {
+    // TODO: errors.WriteError?
     // TODO: reflect whether or not a row was deleted? errorIfMissing?
-    cb()
+    //   if (opts.errorIfMissing && !result.rows.length) throw ...
+    cb(err || null)
   })
 }
 
