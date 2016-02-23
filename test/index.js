@@ -2,17 +2,19 @@ const test = require('tape')
 const pgdown = require('../')
 const levelup = require('levelup')
 const xtend = require('xtend')
-
-// TODO: get from config
-const DEFAULT_URI = 'postgres://dlandolt:@localhost:5432/pgdown_testdb/pgdown_test_table'
+const DEFAULT_URI = require('./rc').uri
 
 function factory (location, options) {
-  if (typeof location === 'string') {
+  if (typeof location === 'undefined') {
     location = DEFAULT_URI
-    options = location
+    options = {}
   }
 
-  const db = levelup(location || DEFAULT_URI, xtend({
+  if (typeof options === 'undefined') {
+    options = {}
+  }
+
+  return levelup(location, xtend({
     db: pgdown,
     keyEncoding: 'utf8',
     valueEncoding: 'json'
