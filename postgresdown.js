@@ -3,6 +3,7 @@ const inherits = require('inherits')
 const pg = require('pg')
 const AbstractLevelDOWN = require('abstract-leveldown').AbstractLevelDOWN
 const errors = require('level-errors')
+const debug = require('debug')('postgresdown')
 
 function PostgresDOWN (location) {
   if (!(this instanceof PostgresDOWN)) {
@@ -30,6 +31,7 @@ function PostgresDOWN (location) {
   const uri = url.format(parsed)
 
   // TODO: use pg.pools
+  debug(`creating pg client with uri ${uri}`)
   this.client = new pg.Client(uri)
 
   AbstractLevelDOWN.call(this, location)
@@ -52,6 +54,7 @@ PostgresDOWN.prototype._open = function (options, cb) {
     client.query(sql, cb)
   }
 
+  debug('_open: creating client')
   client.connect(function (err) {
     if (err) return cb(err)
 
@@ -79,6 +82,7 @@ PostgresDOWN.prototype._open = function (options, cb) {
 }
 
 PostgresDOWN.prototype._close = function (cb) {
+  debug('_close: ending client')
   try {
     this.client.end()
     process.nextTick(cb)
@@ -91,11 +95,12 @@ PostgresDOWN.prototype._close = function (cb) {
 
 PostgresDOWN.prototype._put = function (key, value, options, cb) {
   const INSERT = `INSERT INTO ${this.path} (key,value) VALUES($1,$2)`
-  const UPSERT = INSERT + ' ON CONFLICT (key) DO UPDATE SET value = excluded.value'
+  const QUERY = INSERT + ' ON CONFLICT (key) DO UPDATE SET value = excluded.value'
   // const UPDATE = `UPDATE ${this.path} SET value = $2 WHERE key = $1'`
 
   // just an upsert for now
-  this.client.query(UPSERT, [ key, value ], function (err) {
+  debug(`_put: ${QUERY}, ${key}, ${value}`)
+  this.client.query(QUERY, [ key, value ], function (err) {
     if (err) return cb(err) // TODO: errors.WriteError?
 
     cb()
@@ -123,7 +128,9 @@ PostgresDOWN.prototype._put = function (key, value, options, cb) {
 
 PostgresDOWN.prototype._get = function (key, options, cb) {
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
-  this.client.query(`SELECT value::text FROM ${this.path}`, function (err, result) {
+  const QUERY = `SELECT value::text FROM ${this.path}`
+  debug(`_get: ${QUERY}`)
+  this.client.query(QUERY, function (err, result) {
     if (err) return cb(err)
     if (result.rows.length) {
       cb(null, result.rows[0].value)
@@ -135,9 +142,10 @@ PostgresDOWN.prototype._get = function (key, options, cb) {
 }
 
 PostgresDOWN.prototype._del = function (key, options, cb) {
-  this.client.query(`DELETE FROM ${this.path} WHERE key = $1`, [ key ], function (err, result) {
+  const QUERY = `DELETE FROM ${this.path} WHERE key = $1`
+  debug(`_del: ${QUERY}`)
+  this.client.query(QUERY, [ key ], function (err, result) {
     if (err) return cb(err) // TODO: errors.WriteError?
-
     // TODO: reflect whether or not a row was deleted? errorIfMissing?
     cb()
   })
