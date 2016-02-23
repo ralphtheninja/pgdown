@@ -1,0 +1,32 @@
+#!/usr/bin/env node
+
+const pg = require('pg')
+const conString = 'postgres://test_user:woopwoop@172.17.0.2:5432/postgresdown'
+
+const data = generateData()
+
+var client = new pg.Client(conString)
+client.connect(function (err) {
+  if (err) throw err
+  data.map(function (d) {
+    return client.query("insert into data(key, value) values('" + d.key + "', '" + JSON.stringify(d.value) + "')")
+  }).pop().on('end', function () {
+    console.log('inserted %d elements', data.length)
+    client.end()
+  })
+})
+
+function generateData () {
+  var data = []
+  for (var i = 0; i < 1000; i++) {
+    data.push({
+      key: i,
+      value: {
+        foo: 'bar' + i,
+        random: Math.round(Math.random() * 1000)
+      }
+    })
+  }
+  return data
+}
+

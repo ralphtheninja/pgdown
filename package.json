@@ -1,0 +1,22 @@
+{
+  "name": "postgresdown",
+  "version": "0.0.0",
+  "description": "abstract-leveldown backed by postgres",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js && npm run lint",
+    "lint": "standard"
+  },
+  "keywords": [],
+  "author": "Lars-Magnus Skog <ralphtheninja@riseup.net>",
+  "license": "MIT",
+  "dependencies": {
+    "abstract-leveldown": "~2.4.1",
+    "inherits": "^2.0.1",
+    "pg": "^4.4.6"
+  },
+  "devDependencies": {
+    "standard": "^6.0.7",
+    "tape": "^4.4.0"
+  }
+}
