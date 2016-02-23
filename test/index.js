@@ -12,11 +12,19 @@ function factory (location, options) {
     options = location
   }
 
-  return levelup(location || DEFAULT_URI, xtend({
+  const db = levelup(location || DEFAULT_URI, xtend({
     db: pgdown,
     keyEncoding: 'utf8',
     valueEncoding: 'json'
   }, options))
+
+  // // ensure we close our clients even when tests fail
+  // // TODO: looks like we need introduce some delay to enable this
+  // db.on('open', (a) => {
+  //   db.db.pg.client.on('drain', db.close.bind(db))
+  // })
+
+  return db
 }
 
 test('initialization', (t) => {
