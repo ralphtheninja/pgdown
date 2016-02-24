@@ -1,7 +1,7 @@
 Install and run the postgres server:
 
 ```
-$ docker run -d -v /tmp/data:/var/lib/postgresql/data --name some-postgres clkao/postgres-plv8:9.5
+$ docker run -d -p 5432:5432 -v /tmp/data:/var/lib/postgresql/data --name some-postgres clkao/postgres-plv8:9.5
 ```
 
 If you launch the container with only bash you have access to commands like `createdb`, `createuser` which are pretty handy.
@@ -30,10 +30,10 @@ root@70eb107404d3:/# psql -U postgres -h $POSTGRES_PORT_5432_TCP_ADDR
 postgres=#
 ```
 
-Create a database named `postgresdown`:
+Create a database named `pgdown`:
 
 ```
-postgres=# CREATE DATABASE postgresdown;
+postgres=# CREATE DATABASE pgdown;
 CREATE DATABASE
 ```
 
@@ -45,7 +45,7 @@ List of databases
 Name     |  Owner   | Encoding |  Collate   |   Ctype    |   Access privileges
 --------------+----------+----------+------------+------------+-----------------------
 postgres     | postgres | UTF8     | en_US.utf8 | en_US.utf8 |
-postgresdown | postgres | UTF8     | en_US.utf8 | en_US.utf8 |
+pgdown       | postgres | UTF8     | en_US.utf8 | en_US.utf8 |
 template0    | postgres | UTF8     | en_US.utf8 | en_US.utf8 | =c/postgres          +
              |          |          |            |            | postgres=CTc/postgres
 template1    | postgres | UTF8     | en_US.utf8 | en_US.utf8 | =c/postgres          +
@@ -53,11 +53,11 @@ template1    | postgres | UTF8     | en_US.utf8 | en_US.utf8 | =c/postgres      
 (4 rows)
 ```
 
-Connect to postgresdown database:
+Connect to `pgdown` database:
 
 ```
-postgres=# \c postgresdown;
-You are now connected to database "postgresdown" as user "postgres".
+postgres=# \c pgdown;
+You are now connected to database "pgdown" as user "postgres".
 ```
 
 Create a table:
