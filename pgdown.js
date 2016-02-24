@@ -63,19 +63,9 @@ PgDOWN.prototype._open = function (options, cb) {
   const errorIfExists = options.errorIfExists
   const createIfMissing = options.createIfMissing
 
-  debug('_open: pg config  %j', config)
-  pg.connect(config, (err, client, release) => {
-    if (err) return cb(err)
-
-    const done = function (err) {
-      release()
-      if (err) debug('_open: client.query error %j', err)
-      cb(err)
-    }
-
+  const sql = (function () {
     if (createIfMissing) {
       const ifNotExists = errorIfExists ? '' : ' IF NOT EXISTS'
-
       const schemaSql = schema && `CREATE SCHEMA${ifNotExists} ${schema};`
 
       // key text CONSTRAINT idx_key PRIMARY KEY,
@@ -86,19 +76,25 @@ PgDOWN.prototype._open = function (options, cb) {
         );
       `
 
-      const createSql = (schemaSql || '') + tableSql
-      debug('_open: createIfMissing sql: %s', createSql)
-
-      client.query(createSql, done)
+      return (schemaSql || '') + tableSql
     } else if (errorIfExists) {
       // test for table existence
-      const existsSql = `SELECT COUNT(*) from ${table} LIMIT 1`
-      debug('_open: errorIfExists sql: %s', existsSql)
-
-      client.query(existsSql, done)
-    } else {
-      done()
+      return `SELECT COUNT(*) from ${table} LIMIT 1`
     }
+  })()
+
+  debug('_open: pg config  %j', config)
+  pg.connect(config, (err, client, release) => {
+    if (err) return cb(err)
+
+    const done = function (err) {
+      release()
+      if (err) debug('_open: client.query error %j', err)
+      cb(err)
+    }
+
+    if (sql) client.query(sql, done)
+    else done()
   })
 }
 
