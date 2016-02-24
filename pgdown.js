@@ -67,6 +67,12 @@ PgDOWN.prototype._open = function (options, cb) {
   pg.connect(config, (err, client, release) => {
     if (err) return cb(err)
 
+    const done = function (err) {
+      release()
+      if (err) debug('_open: client.query error %j', err)
+      cb(err)
+    }
+
     if (createIfMissing) {
       const ifNotExists = errorIfExists ? '' : ' IF NOT EXISTS'
 
@@ -83,24 +89,15 @@ PgDOWN.prototype._open = function (options, cb) {
       const createSql = (schemaSql || '') + tableSql
       debug('_open: createIfMissing sql: %s', createSql)
 
-      client.query(createSql, (err) => {
-        release()
-        if (err) debug('_open: client.connect error', err)
-        cb(err)
-      })
+      client.query(createSql, done)
     } else if (errorIfExists) {
       // test for table existence
       const existsSql = `SELECT COUNT(*) from ${table} LIMIT 1`
       debug('_open: errorIfExists sql: %s', existsSql)
 
-      client.query(existsSql, (err) => {
-        release()
-        if (err) debug('_open: client.connect error %j', err)
-        cb(err)
-      })
+      client.query(existsSql, done)
     } else {
-      release()
-      cb()
+      done()
     }
   })
 }
