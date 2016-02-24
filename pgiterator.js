@@ -1,8 +1,10 @@
+const inherits = require('inherits')
+const pg = require('pg')
 const Cursor = require('pg-cursor')
 const AbstractIterator = require('abstract-leveldown').AbstractIterator
 const debug = require('debug')('pgdown')
 
-const RANGE_OPS = {
+const OPERATORS = {
   lt: '<',
   lte: '<=',
   gte: '>=',
@@ -12,21 +14,21 @@ const RANGE_OPS = {
 }
 
 // TODO: sanitization
-function formatRange (range) {
+function formatConstraints (constraints) {
   // handle `or` clauses
-  if (Array.isArray(range)) {
-    return '(' + range.map(formatRange).join(') OR (') + ')'
+  if (Array.isArray(constraints)) {
+    return '(' + constraints.map(formatConstraints).join(') OR (') + ')'
   }
 
   const clauses = []
-  for (var k in range) {
-    const v = range[k]
-    const op = RANGE_OPS[k]
+  for (var k in constraints) {
+    const v = constraints[k]
+    const op = OPERATORS[k]
     if (op && v !== undefined) {
       clauses.push(`key${op}(${v})`)
     } else if (op === 'or') {
       // TODO: just being lazy, but should fix up extra array wrapping cruft
-      clauses.push(formatRange([ range[k] ]))
+      clauses.push(formatConstraints([ constraints[k] ]))
     }
   }
 
@@ -38,38 +40,87 @@ module.exports = PgIterator
 function PgIterator (db, options) {
   AbstractIterator.call(this, db)
 
+  options = options || {}
+
+  this._count = 0
+  this._limit = isNaN(options.limit) ? -1 : options.limit
+  this._reverse = !!options.reverse
+  this._constraints = formatConstraints(options)
+
+  // TODO: buffer results
+  // this._highWaterMark = options.highWaterMark || db.highWaterMark || 256
+}
+
+inherits(PgIterator, AbstractIterator)
+
+PgIterator.prototype._ensureCursor = function (cb) {
+  if (this._cursor) return cb()
+
   const clauses = []
+  const args = []
+  const table = this.db.pg.table
 
-  clauses.push('SELECT key, value FROM ${db.pg.id}')
+  clauses.push(`SELECT key, value::text FROM ${table}`)
 
-  const constraints = formatRange(options)
-  if (constraints) clauses.push('WHERE ' + constraints)
+  if (this._constraints) {
+    args.push(this._constraints)
+    clauses.push('WHERE $' + args.length)
+  }
 
-  clauses.push('ORDER BY key ' + options.reverse ? 'DESC' : 'ASC')
+  clauses.push('ORDER BY key ' + (this._reverse ? 'DESC' : 'ASC'))
 
-  if (options.limit > 0) clauses.push('LIMIT ' + options.limit)
+  if (this._limit.limit >= 0) {
+    args.push(this._limit)
+    clauses.push('LIMIT $' + args.length)
+  }
 
-  // TODO: any reason not to do this?
-  // if (options.offset > 0) clauses.push('OFFSET ' + options.offset)
+  // TODO: any reason not to add this?
+  // if (options.offset > 0) {
+  //   args.push(options.offset)
+  //   clauses.push('OFFSET $' + args.length)
+  // }
 
   const sql = clauses.join(' ')
-  debug('iterator query:', sql)
+  debug('cursor sql: %s %j', sql, args)
 
-  // iterator
-  this.pg = {}
-  this.pg.cursor = db.pg.client.query(Cursor(sql))
+  // create cursor
+  pg.connect(this.db.pg.config, (err, client, release) => {
+    if (err) {
+      release()
+      return cb(err)
+    }
+
+    this._release = release
+
+    debug('creating cursor')
+    this._cursor = client.query(new Cursor(sql, args))
+    cb()
+
+    // TODO: do we have to listen for this?
+    client.on('error', (err) => {
+      debug('cursor error %j', err)
+      // release()
+      // cb(err)
+    })
+  })
 }
 
 PgIterator.prototype._next = function (cb) {
-  // TODO: read in batches, up to some reasonable limit, and cache
-  this.pg.cursor.read(1, (err, rows) => {
-    if (err || !rows.length) return cb(err)
+  this._ensureCursor((err) => {
+    if (err) return cb(err)
 
-    const row = rows[0] || {}
-    cb(null, row.key, row.value)
+    // TODO: read in batches, up to some reasonable limit, and cache
+    this._cursor.read(1, (err, rows) => {
+      if (err || !rows.length) return cb(err || null)
+
+      const row = rows[0] || {}
+      cb(null, row.key, row.value)
+    })
   })
 }
 
 PgIterator.prototype._end = function (cb) {
-  this.pg.cursor.close(cb)
+  this._release && this._release()
+  this._cursor && this._cursor.close(cb)
+  this._cursor = this._release = null
 }

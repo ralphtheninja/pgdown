@@ -2,17 +2,20 @@ const test = require('tape')
 const pgdown = require('../')
 const levelup = require('levelup')
 const xtend = require('xtend')
-const DEFAULT_URI = require('./rc').uri
+const config = require('rc')('pgdown', {
+  database: 'postgres',
+  table: 'pgdown_test'
+})
+
+const path = (db, table) => `/${db || config.database}/${table || config.table}`
 
 function factory (location, options) {
-  if (typeof location === 'undefined') {
-    location = DEFAULT_URI
-    options = {}
+  if (typeof location === 'string') {
+    options = location
+    location = null
   }
 
-  if (typeof options === 'undefined') {
-    options = {}
-  }
+  location = location || path()
 
   const db = levelup(location, xtend({
     db: pgdown,
@@ -20,63 +23,75 @@ function factory (location, options) {
     valueEncoding: 'json'
   }, options))
 
-  // // ensure we close our clients even when tests fail
-  // // TODO: looks like we need introduce some delay to enable this
-  // db.on('open', (a) => {
-  //   db.db.pg.client.on('drain', db.close.bind(db))
-  // })
-
   return db
 }
 
-test('initialization', (t) => {
-  t.test('pgdown defaults', (t) => {
-    const db = pgdown(DEFAULT_URI)
-    t.ok(db.pg.client, 'client initialized')
-    // t.equal(db.pg.id, '""table_name"', 'default db id')
-    // t.equal(db.pg.id, '"nested__schema__path"."table_name"', 'db id w/ nested schema')
+test('pgdown', (t) => {
+  const db = pgdown(path())
+  const table = db.pg.table
+
+  t.test('defaults', (t) => {
+    t.equal(db.pg.database, config.database, 'test database')
+    t.equal(table, '"' + config.table + '"', 'test table')
+    t.end()
+  })
+
+  t.test('open', (t) => {
+    db.open(t.end)
+  })
+
+  t.test('drop', (t) => {
+    db.drop(t.end)
+  })
+
+  t.test('close', (t) => {
     db.close(t.end)
   })
 })
 
-// test('raw client queries', (t) => {
-//   const db = factory()
-//   db.open((err) => {
-//     if (err) return t.end(err)
-
-//     db.db.pg.client.query('DROP TABLE ${db.pg.id}', (err, result) => {
-//       console.warn(err, result)
-//       t.end(err)
-//     })
-//   })
-// })
-
-// test('open', (t) => {
-//   t.test('createIfMissing', (t) => {
-//     t.test('when true', (t) => {
-//       const db = factory({
-//         createIfMissing: true
-//       })
-//     })
-
-//     t.test('when false', (t) => {
-//       const db = factory({
-//         createIfMissing: false
-//       })
-//     })
-//   })
-// })
-
-var db = factory()
-
 test('open', (t) => {
-  db.open((err) => {
-    t.end(err)
+  t.test('invalid db name', (t) => {
+    const db = pgdown(path('pg_bad_db_'))
+    db.open((err) => {
+      t.ok(err, 'invalid db name throws')
+      t.end()
+    })
   })
+
+  t.test('invalid table name', (t) => {
+    const db = pgdown(path(null, 'bad\0_table_'))
+    db.open((err) => {
+      t.ok(err, 'invalid table name throws')
+      t.end()
+    })
+  })
+
+  // t.test('createIfMissing', (t) => {
+  //   t.test('when true', (t) => {
+  //     const db = factory({
+  //       createIfMissing: true
+  //     })
+  //   })
+
+  //   t.test('when false', (t) => {
+  //     const db = factory({
+  //       createIfMissing: false
+  //     })
+  //   })
+  // })
 })
 
 // TODO: drop table
 test('crud', (t) => {
+  const db = factory()
+
+  t.test('init', (t) => {
+    db.open((err) => {
+      if (err) return t.end(err)
+      db.db.drop(t.end)
+    })
+  })
+
   t.test('put', (t) => {
     db.put('a', { str: 'foo', int: 123 }, function (err, result) {
       if (err) return t.end(err)
@@ -103,13 +118,48 @@ test('crud', (t) => {
       })
     })
   })
-})
 
-test('close', (t) => {
-  db.close((err) => {
-    if (err) return t.end(err)
-    // idempotent close
-    db.close(t.end)
+  t.test('batch', (t) => {
+    const batch = [
+      {
+        type: 'put',
+        key: 'aa',
+        value: { k: 'aa' }
+      },
+      {
+        type: 'put',
+        key: 'ac',
+        value: { k: 'ac' }
+      },
+      {
+        type: 'put',
+        key: 'ab',
+        value: { k: 'ab' }
+      }
+    ]
+
+    t.test('array batch', (t) => {
+      db.batch(batch, t.end)
+    })
+
+    t.skip('createReadStream', (t) => {
+      const data = []
+      db.createReadStream()
+      .on('error', t.end)
+      .on('data', (d) => data.push(d))
+      .on('end', () => {
+        const sorted = batch.slice().sort()
+        t.deepEqual(data, sorted, 'all records in order')
+      })
+    })
+  })
+
+  t.test('close', (t) => {
+    db.close((err) => {
+      if (err) return t.end(err)
+      // idempotent close
+      db.close(t.end)
+    })
   })
 })
 
