@@ -14,7 +14,7 @@ function factory (location, options) {
     options = {}
   }
 
-  return levelup(location, xtend({
+  const db = levelup(location, xtend({
     db: pgdown,
     keyEncoding: 'utf8',
     valueEncoding: 'json'
