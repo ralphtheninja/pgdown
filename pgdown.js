@@ -101,8 +101,8 @@ PgDOWN.prototype._open = function (options, cb) {
   debug('_open: client connecting')
   client.connect((err) => {
     // TODO: errors.InitializationError?
-    debug('_open: client.connect error', err)
-    cb(err)
+    if (err) debug('_open: client.connect error %j', err)
+    cb(err || null)
   })
 }
 
@@ -113,6 +113,7 @@ PgDOWN.prototype._close = function (cb) {
     this.pg.client.end()
     process.nextTick(cb)
   } catch (err) {
+    debug('_close: error %j', err)
     process.nextTick(function () {
       cb(err)
     })
@@ -158,10 +159,8 @@ PgDOWN.prototype._put = function (key, value, options, cb) {
 
   this.pg.client.query(sql, [ key, value ], function (err) {
     // TODO: errors.WriteError?
-    debug('_put error', err)
-    if (err) return cb(err)
-
-    cb()
+    if (err) debug('_put error %j', err)
+    cb(err || null)
   })
 }
 
@@ -173,6 +172,7 @@ PgDOWN.prototype._del = function (key, options, cb) {
     // TODO: errors.WriteError?
     // TODO: reflect whether or not a row was deleted? errorIfMissing?
     //   if (opts.errorIfMissing && !result.rows.length) throw ...
+    if (err) debug('_del: error %j', err)
     cb(err || null)
   })
 }
@@ -183,9 +183,12 @@ PgDOWN.prototype._get = function (key, options, cb) {
   debug('_get: sql', sql)
 
   this.pg.client.query(sql, (err, result) => {
-    if (err) cb(err)
-    else if (result.rows.length) cb(null, result.rows[0].value)
-    else cb(new errors.NotFoundError('key: ' + key)) // TODO: better message
+    if (err || result.rows.length === 0) {
+      err = err || new errors.NotFoundError('key: ' + key) // TODO: better message
+      debug('_get: error %j', err)
+      return cb(err)
+    }
+    cb(null, result.rows[0].value)
   })
 }
 
