@@ -42,7 +42,7 @@ Make sure it's there:
 ```
 postgres=# \l
 List of databases
-Name     |  Owner   | Encoding |  Collate   |   Ctype    |   Access privileges
+Name         |  Owner   | Encoding |  Collate   |   Ctype    |   Access privileges
 --------------+----------+----------+------------+------------+-----------------------
 postgres     | postgres | UTF8     | en_US.utf8 | en_US.utf8 |
 pgdown       | postgres | UTF8     | en_US.utf8 | en_US.utf8 |
