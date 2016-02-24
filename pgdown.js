@@ -13,7 +13,7 @@ function PgDOWN (location) {
     return new PgDOWN(location)
   }
 
-  debug('location %j', location)
+  debug('location %s', location)
 
   const parts = location.split('/')
 
@@ -81,7 +81,7 @@ PgDOWN.prototype._open = function (options, cb) {
       `
 
       const createSql = (schemaSql || '') + tableSql
-      debug('_open: createIfMissing sql %j', createSql)
+      debug('_open: createIfMissing sql: %s', createSql)
 
       client.query(createSql, (err) => {
         release()
@@ -91,7 +91,7 @@ PgDOWN.prototype._open = function (options, cb) {
     } else if (errorIfExists) {
       // test for table existence
       const existsSql = `SELECT COUNT(*) from ${table} LIMIT 1`
-      debug('_open: errorIfExists sql %j', existsSql)
+      debug('_open: errorIfExists sql: %s', existsSql)
 
       client.query(existsSql, (err) => {
         release()
@@ -145,10 +145,10 @@ PgDOWN.operation = {}
 PgDOWN.operation.put = function (client, table, op, cb) {
   const sql = _putSql(table, op)
   const args = [ op.key, op.value ]
-  debug('put op: sql %j %j', sql, args)
+  debug('put sql: %s %j', sql, args)
 
   client.query(sql, args, function (err) {
-    if (err) debug('put op: error %j', err)
+    if (err) debug('put error: %j', err)
     // TODO: errors.WriteError?
     cb(err || null)
   })
@@ -157,13 +157,13 @@ PgDOWN.operation.put = function (client, table, op, cb) {
 PgDOWN.operation.del = function (client, table, op, cb) {
   const sql = `DELETE FROM ${table} WHERE key = $1`
   const args = [ op.key ]
-  debug('del op: sql %j %j', sql, args)
+  debug('del sql: %s %j', sql, args)
 
   client.query(sql, [ op.key ], (err, result) => {
     // TODO: reflect whether or not a row was deleted? errorIfMissing?
     //   if (op.errorIfMissing && !result.rows.length) throw ...
 
-    if (err) debug('del op: error %j', err)
+    if (err) debug('del error: %j', err)
     // TODO: errors.WriteError?
     cb(err || null)
   })
@@ -204,7 +204,7 @@ PgDOWN.prototype._get = function (key, opts, cb) {
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
   const sql = `SELECT value::text FROM ${table} WHERE (key)=$1`
   const args = [ key ]
-  debug('_get: sql %j %j', sql, args)
+  debug('get sql: %s %j', sql, args)
 
   pg.connect(this.pg.config, (err, client, release) => {
     if (err) return cb(err)
@@ -231,12 +231,12 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
 
     const done = after(ops.length, (err) => {
       if (err) {
-        debug('batch commit aborting %j', err)
+        debug('batch commit error: %j', err)
         client.query('ROLLBACK', (txErr) => {
           release(txErr)
 
           // if rollback fails something's really screwed
-          if (txErr) debug('transaction rollback error %j', txErr)
+          if (txErr) debug('transaction rollback error: %j', txErr)
           else debug('transaction rollback successful')
 
           cb(err || null)
@@ -246,7 +246,7 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
         client.query('COMMIT', (txErr) => {
           release(txErr)
 
-          if (txErr) debug('transaction commit error %j', txErr)
+          if (txErr) debug('transaction commit error: %j', txErr)
           else debug('transaction commit successful')
 
           cb(txErr || null)

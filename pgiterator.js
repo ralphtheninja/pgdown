@@ -96,11 +96,10 @@ PgIterator.prototype._ensureCursor = function (cb) {
     this._cursor = client.query(new Cursor(sql, args))
     cb()
 
-    // TODO: do we have to listen for this?
     client.on('error', (err) => {
-      debug('cursor error %j', err)
-      // release()
-      // cb(err)
+      // TODO: do we have to listen for this?
+      // and do we need something like `release(err)`
+      debug('cursor query error: %j', err)
     })
   })
 }
