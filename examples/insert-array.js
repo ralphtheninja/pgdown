@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
-const pg = require('pg')
-const PostgresDOWN = require('../')
+const PgDOWN = require('../')
 const after = require('after')
-const db = PostgresDOWN(require('../test/rc').uri)
+const db = PgDOWN(require('../test/rc').uri)
 
 db.open({ createIfMissing: true }, function (err) {
   if (err) return console.error('failed to open db', err)
