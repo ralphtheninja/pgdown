@@ -4,8 +4,7 @@ node_js:
   - '5'
 
 env:
-  - PGDATABASE=postgres
-  - PGUSER=postgres
+  - PGDATABASE=postgres PGUSER=postgres
 
 services:
   - docker
