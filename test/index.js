@@ -1,7 +1,8 @@
 const test = require('tape')
-const pgdown = require('../')
+const after = require('after')
 const levelup = require('levelup')
 const xtend = require('xtend')
+const pgdown = require('../')
 const config = require('rc')('pgdown', {
   database: 'postgres',
   table: 'pgdown_test'
@@ -151,18 +152,39 @@ test('crud', (t) => {
     }
   ]
 
+  const sorted = batch.slice().sort((a, b) => a.key < b.key ? -1 : 1)
+
   t.test('array batch', (t) => {
-    db.batch(batch, t.end)
+    db.batch(batch, (err) => {
+      if (err) return t.end(err)
+
+      const done = after(batch.length, t.end)
+
+      db.get('aa', (err, record) => {
+        done(err)
+        t.deepEqual(record, sorted[0].value, 'aa')
+      })
+      db.get('ab', (err, record) => {
+        done(err)
+        t.deepEqual(record, sorted[1].value, 'ab')
+      })
+      db.get('ac', (err, record) => {
+        done(err)
+        t.deepEqual(record, sorted[2].value, 'ac')
+      })
+    })
   })
 
-  t.skip('read stream', (t) => {
+  t.test('read stream', (t) => {
     const data = []
     db.createReadStream()
     .on('error', t.end)
     .on('data', (d) => data.push(d))
     .on('end', () => {
-      const sorted = batch.slice().sort()
+      // add put op type to compare to sorted batch
+      data.forEach((d) => { d.type = 'put' })
       t.deepEqual(data, sorted, 'all records in order')
+      t.end()
     })
   })
 
@@ -170,7 +192,6 @@ test('crud', (t) => {
     db.close((err) => {
       if (err) return t.end(err)
       // idempotent close
-      // TODO this is taking very long to finish
       db.close(t.end)
     })
   })

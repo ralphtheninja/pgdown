@@ -16,15 +16,14 @@
   },
   "homepage": "https://github.com/ralphtheninja/pgdown#readme",
   "dependencies": {
-    "abstract-leveldown": "~2.4.1",
     "abstract-stream-leveldown": "^1.1.1",
     "after": "^0.8.1",
     "debug": "^2.2.0",
     "inherits": "^2.0.1",
     "level-errors": "^1.0.4",
     "pg": "^4.4.6",
-    "pg-cursor": "^1.0.0",
-    "pg-template-tag": "0.0.3"
+    "pg-query-stream": "^1.0.0",
+    "through2": "^2.0.1"
   },
   "devDependencies": {
     "after": "^0.8.1",

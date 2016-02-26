@@ -1,9 +1,10 @@
 const inherits = require('inherits')
 const after = require('after')
+const through2 = require('through2')
 const pg = require('pg')
-const AbstractLevelDOWN = require('abstract-leveldown').AbstractLevelDOWN
+const QueryStream = require('pg-query-stream')
+const AbstractLevelDOWN = require('abstract-stream-leveldown').AbstractStreamLevelDOWN
 const errors = require('level-errors')
-const PgIterator = require('./pgiterator')
 const debug = require('debug')('pgdown')
 
 // const SQL = require('pg-template-tag')
@@ -47,11 +48,11 @@ PgDOWN.prototype._connect = function (cb) {
       return cb(err)
     }
 
-    client.on('error', (err) => {
-      debug('CLIENT ERROR EVENT: %j', err)
-      // TODO: is this necessary?
-      // release(client)
-    })
+    // TODO: is this necessary?
+    // client.on('error', (err) => {
+    //   debug('CLIENT ERROR EVENT: %j', err)
+    //   release(client)
+    // })
 
     cb(null, client, release)
   })
@@ -300,24 +301,92 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
       if (err) return done(err)
 
       // generate statement sql for each batch op
-      for (var i = 0, len = ops.length; i < len; i++) {
-        const op = ops[i]
-        if (!op) continue
-
+      ops.forEach((op) => {
         // TODO: merge op w/ options
         const command = PgDOWN.operation[op.type]
-        if (command) {
-          command(client, table, op, done)
-        } else {
-          return done(new Error('unknown operation type: ' + op.type))
-        }
-      }
+        if (command) return command(client, table, op, done)
+        return done(new Error('unknown operation type: ' + op.type))
+      })
     })
   })
 }
 
-PgDOWN.prototype._iterator = function (options) {
-  return new PgIterator(this, options)
+PgDOWN.operators = {
+  lt: '<',
+  lte: '<=',
+  gte: '>=',
+  gt: '>',
+  eq: '=',
+  ne: '<>'
+}
+
+// TODO: sanitization
+function formatConstraints (constraints) {
+  // handle `or` clauses
+  if (Array.isArray(constraints)) {
+    return '(' + constraints.map(formatConstraints).join(') OR (') + ')'
+  }
+
+  const clauses = []
+  const operators = PgDOWN.operators
+  for (var k in constraints) {
+    const v = constraints[k]
+    const op = operators[k]
+    if (op) {
+      clauses.push(`key${op}(${v})`)
+    } else if (op === 'or') {
+      // TODO: just being lazy, but should fix up extra array wrapping cruft
+      clauses.push(formatConstraints([ constraints[k] ]))
+    }
+  }
+
+  return clauses.filter(Boolean).join(' AND ')
+}
+
+PgDOWN.prototype._createReadStream = function (options) {
+  options = options || {}
+
+  this._count = 0
+  this._limit = isNaN(options.limit) ? -1 : options.limit
+  this._reverse = !!options.reverse
+  this._constraints = formatConstraints(options)
+
+  const clauses = []
+  const args = []
+
+  clauses.push(`SELECT key, value::text FROM ${this.pg.table}`)
+
+  if (this._constraints) {
+    args.push(this._constraints)
+    clauses.push('WHERE $' + args.length)
+  }
+
+  clauses.push('ORDER BY key ' + (this._reverse ? 'DESC' : 'ASC'))
+
+  if (this._limit.limit >= 0) {
+    args.push(this._limit)
+    clauses.push('LIMIT $' + args.length)
+  }
+
+  // TODO: any reason not to add this?
+  // if (options.offset > 0) {
+  //   args.push(options.offset)
+  //   clauses.push('OFFSET $' + args.length)
+  // }
+
+  const sql = clauses.join(' ')
+  debug('query stream sql: %s %j', sql, args)
+
+  const query = new QueryStream(sql, args)
+  const ts = through2.obj()
+
+  this._connect((err, client, release) => {
+    if (err) return ts.destroy(err)
+    // create stream, release the client when stream is finished
+    client.query(query).on('error', release).on('end', release).pipe(ts)
+  })
+
+  return ts
 }
 
 PgDOWN.prototype.drop = function (options, cb) {
