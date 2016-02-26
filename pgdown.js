@@ -1,5 +1,4 @@
 const inherits = require('inherits')
-const after = require('after')
 const through2 = require('through2')
 const pg = require('pg')
 const QueryStream = require('pg-query-stream')
@@ -106,11 +105,12 @@ PgDOWN.prototype._open = function (options, cb) {
       const ifNotExists = errorIfExists ? '' : 'IF NOT EXISTS '
       const schemaSql = this.pg.schema && `CREATE SCHEMA ${ifNotExists}${this.pg.schema};`
 
-      // key text CONSTRAINT idx_key PRIMARY KEY,
+      // key text CONSTRAINT idx_key PRIMARY KEY
+      // TODO: `value jsonb` for 'json' valueEncoding
       const tableSql = `
         CREATE TABLE ${ifNotExists}${this.pg.table} (
           key text PRIMARY KEY,
-          value jsonb
+          value text
         );
       `
 
@@ -183,36 +183,6 @@ function _putSql (table, op) {
       // UPSERT
 }
 
-PgDOWN.prototype._put = function (key, value, opts, cb) {
-  const table = this.pg.table
-  const op = { type: 'put', key: key, value: value }
-  // TODO: merge op, opts?
-
-  this._connect((err, client, release) => {
-    if (err) return cb(err)
-
-    PgDOWN.operation.put(client, table, op, (err) => {
-      release()
-      cb(err)
-    })
-  })
-}
-
-PgDOWN.prototype._del = function (key, opts, cb) {
-  const table = this.pg.table
-  const op = { type: 'del', key: key }
-  // TODO: merge op, opts?
-
-  this._connect((err, client, release) => {
-    if (err) return cb(err)
-
-    PgDOWN.operation.del(client, table, op, (err) => {
-      release()
-      cb(err)
-    })
-  })
-}
-
 PgDOWN.prototype._get = function (key, opts, cb) {
   const table = this.pg.table
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
@@ -261,56 +231,83 @@ PgDOWN.operation.del = function (client, table, op, cb) {
   })
 }
 
-PgDOWN._createWriteStream = function () {
-  const ts = transform2.obj((op, enc, cb) => {
-
-  })
-}
-
-PgDOWN.prototype._batch = function (ops, options, cb) {
+PgDOWN.prototype._put = function (key, value, opts, cb) {
   const table = this.pg.table
+  const op = { type: 'put', key: key, value: value }
+  // TODO: merge op, opts?
 
-  // TODO: // grab a fresh client from the pool for batch ops
   this._connect((err, client, release) => {
     if (err) return cb(err)
 
-    const done = after(ops.length, (err) => {
-      if (err) {
-        debug('batch commit error: %j', err)
-        client.query('ROLLBACK', (txErr) => {
-          release(txErr)
-
-          // if rollback fails something's really screwed
-          if (txErr) debug('transaction rollback error: %j', txErr)
-          else debug('transaction rollback successful')
-
-          cb(err || null)
-        })
-      } else {
-        debug('committing batch')
-        client.query('COMMIT', (txErr) => {
-          release(txErr)
-
-          if (txErr) debug('transaction commit error: %j', txErr)
-          else debug('transaction commit successful')
-
-          cb(txErr || null)
-        })
-      }
-    })
-
-    client.query('BEGIN', (err) => {
-      if (err) return done(err)
-
-      // generate statement sql for each batch op
-      ops.forEach((op) => {
-        // TODO: merge op w/ options
-        const command = PgDOWN.operation[op.type]
-        if (command) return command(client, table, op, done)
-        return done(new Error('unknown operation type: ' + op.type))
-      })
+    PgDOWN.operation.put(client, table, op, (err) => {
+      release()
+      cb(err)
     })
   })
+}
+
+PgDOWN.prototype._del = function (key, opts, cb) {
+  const table = this.pg.table
+  const op = { type: 'del', key: key }
+  // TODO: merge op, opts?
+
+  this._connect((err, client, release) => {
+    if (err) return cb(err)
+
+    PgDOWN.operation.del(client, table, op, (err) => {
+      release()
+      cb(err)
+    })
+  })
+}
+
+PgDOWN.prototype._createWriteStream = function (options) {
+  const table = this.pg.table
+  var client
+
+  const ts = through2.obj((op, enc, cb) => {
+    if (client) write(op, cb)
+
+    debug('initializing write stream')
+    this._connect((err, _client, release) => {
+      if (err) return cb(err)
+
+      client = _client
+      ts.once('error', release).once('end', release)
+
+      client.query('BEGIN', (err) => {
+        if (err) return cb(err)
+        write(op, cb)
+      })
+    })
+  }, (cb) => {
+    debug('committing batch')
+    submit(null, cb)
+  })
+
+  const write = (op, cb) => {
+    // TODO: merge op w/ options
+    const type = op.type || (op.value == null ? 'del' : 'put')
+    const command = PgDOWN.operation[type]
+    try {
+      command(client, table, op, cb)
+    } catch (err) {
+      cb(err)
+    }
+  }
+
+  const submit = (err, cb) => {
+    const action = err ? 'ROLLBACK' : 'COMMIT'
+    debug('batch submit action: %s', action)
+
+    client.query(action, (dbErr) => {
+      if (dbErr) debug('batch %s error: %j', action, dbErr)
+      else debug('batch %s successful', action)
+      cb(dbErr || err)
+    })
+  }
+
+  return ts
 }
 
 PgDOWN.comparator = {
