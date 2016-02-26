@@ -183,35 +183,6 @@ function _putSql (table, op) {
       // UPSERT
 }
 
-PgDOWN.operation = {}
-
-PgDOWN.operation.put = function (client, table, op, cb) {
-  const sql = _putSql(table, op)
-  const args = [ op.key, op.value ]
-  debug('put sql: %s %j', sql, args)
-
-  client.query(sql, args, function (err) {
-    if (err) debug('put error: %j', err)
-    // TODO: errors.WriteError?
-    cb(err || null)
-  })
-}
-
-PgDOWN.operation.del = function (client, table, op, cb) {
-  const sql = `DELETE FROM ${table} WHERE key = $1`
-  const args = [ op.key ]
-  debug('del sql: %s %j', sql, args)
-
-  client.query(sql, [ op.key ], (err, result) => {
-    // TODO: reflect whether or not a row was deleted? errorIfMissing?
-    //   if (op.errorIfMissing && !result.rows.length) throw ...
-
-    if (err) debug('del error: %j', err)
-    // TODO: errors.WriteError?
-    cb(err || null)
-  })
-}
-
 PgDOWN.prototype._put = function (key, value, opts, cb) {
   const table = this.pg.table
   const op = { type: 'put', key: key, value: value }
@@ -261,8 +232,39 @@ PgDOWN.prototype._get = function (key, opts, cb) {
   })
 }
 
-PgDOWN.prototype._chainedBatch = function () {
-  throw new Error('Not Yet Implemented')
+PgDOWN.operation = {}
+
+PgDOWN.operation.put = function (client, table, op, cb) {
+  const sql = _putSql(table, op)
+  const args = [ op.key, op.value ]
+  debug('put sql: %s %j', sql, args)
+
+  client.query(sql, args, function (err) {
+    if (err) debug('put error: %j', err)
+    // TODO: errors.WriteError?
+    cb(err || null)
+  })
+}
+
+PgDOWN.operation.del = function (client, table, op, cb) {
+  const sql = `DELETE FROM ${table} WHERE key = $1`
+  const args = [ op.key ]
+  debug('del sql: %s %j', sql, args)
+
+  client.query(sql, [ op.key ], (err, result) => {
+    // TODO: reflect whether or not a row was deleted? errorIfMissing?
+    //   if (op.errorIfMissing && !result.rows.length) throw ...
+
+    if (err) debug('del error: %j', err)
+    // TODO: errors.WriteError?
+    cb(err || null)
+  })
+}
+
+PgDOWN._createWriteStream = function () {
+  const ts = transform2.obj((op, enc, cb) => {
+
+  })
 }
 
 PgDOWN.prototype._batch = function (ops, options, cb) {
@@ -311,7 +313,7 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
   })
 }
 
-PgDOWN.operators = {
+PgDOWN.comparator = {
   lt: '<',
   lte: '<=',
   gte: '>=',
@@ -328,7 +330,7 @@ function formatConstraints (constraints) {
   }
 
   const clauses = []
-  const operators = PgDOWN.operators
+  const operators = PgDOWN.comparator
   for (var k in constraints) {
     const v = constraints[k]
     const op = operators[k]
