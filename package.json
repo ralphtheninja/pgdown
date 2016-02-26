@@ -17,6 +17,7 @@
   "homepage": "https://github.com/ralphtheninja/pgdown#readme",
   "dependencies": {
     "abstract-leveldown": "~2.4.1",
+    "abstract-stream-leveldown": "^1.1.1",
     "after": "^0.8.1",
     "debug": "^2.2.0",
     "inherits": "^2.0.1",

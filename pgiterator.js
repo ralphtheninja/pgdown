@@ -1,10 +1,10 @@
 const inherits = require('inherits')
-const pg = require('pg')
 const Cursor = require('pg-cursor')
 const AbstractIterator = require('abstract-leveldown').AbstractIterator
+
 const debug = require('debug')('pgdown')
 
-const OPERATORS = {
+PgIterator.operators = {
   lt: '<',
   lte: '<=',
   gte: '>=',
@@ -21,10 +21,11 @@ function formatConstraints (constraints) {
   }
 
   const clauses = []
+  const operators = PgIterator.operators
   for (var k in constraints) {
     const v = constraints[k]
-    const op = OPERATORS[k]
-    if (op && v !== undefined) {
+    const op = operators[k]
+    if (op) {
       clauses.push(`key${op}(${v})`)
     } else if (op === 'or') {
       // TODO: just being lazy, but should fix up extra array wrapping cruft
@@ -32,7 +33,7 @@ function formatConstraints (constraints) {
     }
   }
 
-  return clauses.join(' AND ')
+  return clauses.filter(Boolean).join(' AND ')
 }
 
 module.exports = PgIterator
@@ -48,7 +49,8 @@ function PgIterator (db, options) {
   this._constraints = formatConstraints(options)
 
   // TODO: buffer results
-  // this._highWaterMark = options.highWaterMark || db.highWaterMark || 256
+  // this._highWaterMark = options.highWaterMark || db.highWaterMark || 1000
+  // this._batchSize = 100
 }
 
 inherits(PgIterator, AbstractIterator)
@@ -84,7 +86,7 @@ PgIterator.prototype._ensureCursor = function (cb) {
   debug('cursor sql: %s %j', sql, args)
 
   // create cursor
-  pg.connect(this.db.pg.config, (err, client, release) => {
+  this.db._connect((err, client, release) => {
     if (err) {
       release()
       return cb(err)
@@ -110,6 +112,8 @@ PgIterator.prototype._next = function (cb) {
 
     // TODO: read in batches, up to some reasonable limit, and cache
     this._cursor.read(1, (err, rows) => {
+      debug('cursor result: %j %j', err, rows)
+
       if (err || !rows.length) return cb(err || null)
 
       const row = rows[0] || {}

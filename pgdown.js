@@ -16,92 +16,141 @@ function PgDOWN (location) {
   debug('location %s', location)
 
   const parts = location.split('/')
-
-  this.pg = {}
-
   if (location[0] === '/') {
     // it a location begins with a slash it specifies dbname
     parts.shift()
-    this.pg.database = parts.shift()
+    this._database = parts.shift()
   }
 
   // the last component of location specifies a table name
-  const table = parts.pop()
-  if (!table) throw new Error('location must specify a table name')
+  this._table = parts.pop()
+  if (!this._table) throw new Error('location must specify a table name')
 
   // remaining components represent schema namespace
-  const schema = parts.join('__')
-
-  // TODO: escapement
-  if (schema) {
-    this.pg.schema = `"${schema}"`
-    this.pg.table = `"${schema}"."${table}"`
-  } else {
-    this.pg.table = `"${table}"`
-  }
+  this._schema = parts.join('__') || null
 
   debug('this.pg: %j', this.pg)
 
   // TODO: fix the sql to allow us to use extra path parts for schema name
-  if (schema) throw new Error('schema paths NYI')
+  if (this._schema) throw new Error('schema paths NYI')
 
   AbstractLevelDOWN.call(this, location)
 }
 
 inherits(PgDOWN, AbstractLevelDOWN)
 
+PgDOWN.prototype._connect = function (cb) {
+  debug('_connect: connecting: %j', this.pg.config)
+  pg.connect(this.pg.config, (err, client, release) => {
+    if (err) {
+      release(client)
+      return cb(err)
+    }
+
+    client.on('error', (err) => {
+      debug('CLIENT ERROR EVENT: %j', err)
+      // TODO: is this necessary?
+      // release(client)
+    })
+
+    cb(null, client, release)
+  })
+}
+
+// TODO: binary? parseInt8?
+const PG_KEYS = [
+  'user',
+  'password',
+  'host',
+  'port',
+  'ssl',
+  'rows',
+  'poolSize',
+  'poolIdleTimeout',
+  'reapIntervalMillis'
+]
+
 PgDOWN.prototype._open = function (options, cb) {
-  const table = this.pg.table
-  const schema = this.pg.schema
+  this.pg = {}
   const config = this.pg.config = {}
 
-  // copy over pg connection config
-  config.database = this.pg.database || config.database || null
-  if (options.user) config.user = options.user
-  if (options.password) config.user = options.password
+  // throw if database specified in options
+  // TODO: InitializationError?
+  if (options.database) throw new Error('database specified as db location')
+  config.database = this._database
+
+  // TODO: escapement
+  if (this._schema) {
+    this.pg.schema = `"${this._schema}"`
+    this.pg.table = `"${this._schema}"."${this._table}"`
+  } else {
+    this.pg.table = `"${this._table}"`
+  }
+
+  // copy over pg other options
+  PG_KEYS.forEach((key) => {
+    if (options[key] !== undefined) config[key] = options[key]
+  })
+
+  // create a unique id to isolate connection pool to this specific db instance
+  // TODO: something less shite
+  config.poolId = config.poolId || Math.random()
+
+  debug('_open: pg config: %j', config)
 
   const errorIfExists = options.errorIfExists
-  const createIfMissing = options.createIfMissing
 
-  const sql = (function () {
-    if (createIfMissing) {
-      const ifNotExists = errorIfExists ? '' : ' IF NOT EXISTS'
-      const schemaSql = schema && `CREATE SCHEMA${ifNotExists} ${schema};`
+  const sql = (() => {
+    if (options.createIfMissing) {
+      const ifNotExists = errorIfExists ? '' : 'IF NOT EXISTS '
+      const schemaSql = this.pg.schema && `CREATE SCHEMA ${ifNotExists}${this.pg.schema};`
 
       // key text CONSTRAINT idx_key PRIMARY KEY,
       const tableSql = `
-        CREATE TABLE${ifNotExists} ${table} (
+        CREATE TABLE ${ifNotExists}${this.pg.table} (
           key text PRIMARY KEY,
           value jsonb
         );
       `
 
+      // create table and associated schema, if specified
       return (schemaSql || '') + tableSql
-    } else if (errorIfExists) {
-      // test for table existence
-      return `SELECT COUNT(*) from ${table} LIMIT 1`
     }
+
+    // asserts table existence
+    if (errorIfExists) return `SELECT COUNT(*) from ${this.pg.table} LIMIT 1`
   })()
 
-  debug('_open: pg config  %j', config)
-  pg.connect(config, (err, client, release) => {
+  this._connect((err, client, release) => {
     if (err) return cb(err)
 
-    const done = function (err) {
-      release()
+    const done = (err) => {
       if (err) debug('_open: client.query error %j', err)
+      release(err)
       cb(err)
     }
 
-    if (sql) client.query(sql, done)
-    else done()
+    debug('_open: client.query sql: %j', sql)
+    sql ? client.query(sql, done) : done()
   })
 }
 
 PgDOWN.prototype._close = function (cb) {
   debug('_close: ending client')
-  // clean up pool? anything to do?
-  process.nextTick(cb)
+
+  if (this._closed) return process.nextTick(cb)
+
+  // clean up pool
+  const pool = pg.pools.getOrCreate(this.pg.config)
+  debug('_close: draining pool: %j', pool)
+
+  pool.drain(() => {
+    debug('_close: destroying all pooled resources')
+    pool.destroyAllNow()
+    debug('_close: pool destroyed')
+    this._closed = true
+    cb()
+  })
 }
 
 function _putSql (table, op) {
@@ -167,7 +216,7 @@ PgDOWN.prototype._put = function (key, value, opts, cb) {
   const op = { type: 'put', key: key, value: value }
   // TODO: merge op, opts?
 
-  pg.connect(this.pg.config, (err, client, release) => {
+  this._connect((err, client, release) => {
     if (err) return cb(err)
 
     PgDOWN.operation.put(client, table, op, (err) => {
@@ -182,7 +231,7 @@ PgDOWN.prototype._del = function (key, opts, cb) {
   const op = { type: 'del', key: key }
   // TODO: merge op, opts?
 
-  pg.connect(this.pg.config, (err, client, release) => {
+  this._connect((err, client, release) => {
     if (err) return cb(err)
 
     PgDOWN.operation.del(client, table, op, (err) => {
@@ -199,7 +248,7 @@ PgDOWN.prototype._get = function (key, opts, cb) {
   const args = [ key ]
   debug('get sql: %s %j', sql, args)
 
-  pg.connect(this.pg.config, (err, client, release) => {
+  this._connect((err, client, release) => {
     if (err) return cb(err)
 
     client.query(sql, args, (err, result) => {
@@ -219,7 +268,7 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
   const table = this.pg.table
 
   // TODO: // grab a fresh client from the pool for batch ops
-  pg.connect(this.pg.config, function (err, client, release) {
+  this._connect((err, client, release) => {
     if (err) return cb(err)
 
     const done = after(ops.length, (err) => {
@@ -271,11 +320,19 @@ PgDOWN.prototype._iterator = function (options) {
   return new PgIterator(this, options)
 }
 
-PgDOWN.prototype.drop = function (cb) {
-  pg.connect(this.pg.connection, (err, client, release) => {
+PgDOWN.prototype.drop = function (options, cb) {
+  if (typeof options === 'function') {
+    cb = options
+    options = {}
+  }
+
+  this._connect((err, client, release) => {
     if (err) return cb(err)
 
-    client.query(`DROP TABLE IF EXISTS ${this.pg.table}`, (err) => {
+    // const ifExists = options.errorIfExists ? '' : ' IF EXISTS'
+    const ifExists = ''
+
+    client.query(`DROP TABLE ${ifExists}${this.pg.table}`, (err) => {
       release()
       cb(err || null)
     })

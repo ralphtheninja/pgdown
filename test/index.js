@@ -19,6 +19,7 @@ function factory (location, options) {
 
   const db = levelup(location, xtend({
     db: pgdown,
+    // TODO: make this not required
     keyEncoding: 'utf8',
     valueEncoding: 'json'
   }, options))
@@ -28,11 +29,11 @@ function factory (location, options) {
 
 test('pgdown', (t) => {
   const db = pgdown(path())
-  const table = db.pg.table
 
   t.test('defaults', (t) => {
-    t.equal(db.pg.database, config.database, 'test database')
-    t.equal(table, '"' + config.table + '"', 'test table')
+    t.equal(db._database, config.database, 'test database')
+    t.equal(db._table, config.table, 'test table')
+    t.equal(db._schema, null, 'no schema')
     t.end()
   })
 
@@ -51,7 +52,10 @@ test('pgdown', (t) => {
 
 test('open', (t) => {
   t.test('invalid db name', (t) => {
-    const db = pgdown(path('pg_bad_db_'))
+    const badDb = 'pg_bad_db_'
+    const db = pgdown(path(badDb))
+    t.equal(db._database, badDb, 'bad db name')
+
     db.open((err) => {
       t.ok(err, 'invalid db name throws')
       t.end()
@@ -59,7 +63,10 @@ test('open', (t) => {
   })
 
   t.test('invalid table name', (t) => {
-    const db = pgdown(path(null, 'bad\0_table_'))
+    const badTable = 'bad\0_table_'
+    const db = pgdown(path(null, badTable))
+    t.equal(db._table, badTable, 'bad table name')
+
     db.open((err) => {
       t.ok(err, 'invalid table name throws')
       t.end()
@@ -81,17 +88,22 @@ test('open', (t) => {
   // })
 })
 
-// TODO: drop table
 test('crud', (t) => {
-  const db = factory({ createIfMissing: true })
+  const db = factory()
 
-  t.test('init', (t) => {
+  t.test('initialize', (t) => {
     db.open((err) => {
       if (err) return t.end(err)
-      // This doesn't work
-      // db.db.drop(t.end)
-      t.end()
+
+      db.db.drop((err) => {
+        if (err) return t.end(err)
+        db.close(t.end)
+      })
     })
+  })
+
+  t.test('open', (t) => {
+    db.open(t.end)
   })
 
   t.test('put', (t) => {
@@ -121,38 +133,36 @@ test('crud', (t) => {
     })
   })
 
-  t.test('batch', (t) => {
-    const batch = [
-      {
-        type: 'put',
-        key: 'aa',
-        value: { k: 'aa' }
-      },
-      {
-        type: 'put',
-        key: 'ac',
-        value: { k: 'ac' }
-      },
-      {
-        type: 'put',
-        key: 'ab',
-        value: { k: 'ab' }
-      }
-    ]
+  const batch = [
+    {
+      type: 'put',
+      key: 'aa',
+      value: { k: 'aa' }
+    },
+    {
+      type: 'put',
+      key: 'ac',
+      value: { k: 'ac' }
+    },
+    {
+      type: 'put',
+      key: 'ab',
+      value: { k: 'ab' }
+    }
+  ]
 
-    t.test('array batch', (t) => {
-      db.batch(batch, t.end)
-    })
+  t.test('array batch', (t) => {
+    db.batch(batch, t.end)
+  })
 
-    t.skip('createReadStream', (t) => {
-      const data = []
-      db.createReadStream()
-      .on('error', t.end)
-      .on('data', (d) => data.push(d))
-      .on('end', () => {
-        const sorted = batch.slice().sort()
-        t.deepEqual(data, sorted, 'all records in order')
-      })
+  t.skip('read stream', (t) => {
+    const data = []
+    db.createReadStream()
+    .on('error', t.end)
+    .on('data', (d) => data.push(d))
+    .on('end', () => {
+      const sorted = batch.slice().sort()
+      t.deepEqual(data, sorted, 'all records in order')
     })
   })
 
@@ -165,25 +175,3 @@ test('crud', (t) => {
     })
   })
 })
-
-// compatibility w/ leveldown api
-
-// require('abstract-leveldown/abstract/leveldown-test').args(factory, test, testCommon)
-
-// require('abstract-leveldown/abstract/open-test').args(factory, test, testCommon)
-// require('abstract-leveldown/abstract/open-test').open(factory, test, testCommon)
-
-// require('abstract-leveldown/abstract/put-test').all(factory, test, testCommon)
-
-// require('abstract-leveldown/abstract/del-test').all(factory, test, testCommon)
-
-// require('abstract-leveldown/abstract/get-test').all(factory, test, testCommon)
-
-// require('abstract-leveldown/abstract/put-get-del-test').all(factory, test, testCommon, testBuffer)
-
-// require('abstract-leveldown/abstract/iterator-test').all(factory, test, testCommon)
-
-// require('abstract-leveldown/abstract/batch-test').all(factory, test, testCommon)
-// require('abstract-leveldown/abstract/chained-batch-test').all(factory, test, testCommon)
-
-// require('abstract-leveldown/abstract/close-test').close(factory, test, testCommon)
