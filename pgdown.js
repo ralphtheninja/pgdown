@@ -185,9 +185,21 @@ function _putSql (table, op) {
       // UPSERT
 }
 
-const parseValue = (value, options) => {
-  // NB: values should always be strings here
-  return options && options.asBuffer === false ? value : new Buffer(value, 'utf-8')
+const decodeValue = (value, options) => {
+  debug('decodeValue: %j', value)
+  // NB: expects string values from pg for now
+  if (options && options.asBuffer === false) {
+    return String(value || '')
+  } else {
+    return new Buffer(String(value || ''), 'utf-8')
+  }
+}
+
+const encodeValue = (value, options, batchOptions) => {
+  debug('decodeValue: %j options: %j %j', value, options, batchOptions)
+  if (value == null) return value
+  // NB: stringify everything going into pg for now
+  return String(value)
 }
 
 PgDOWN.prototype._get = function (key, options, cb) {
@@ -205,7 +217,7 @@ PgDOWN.prototype._get = function (key, options, cb) {
     client.query(sql, args, (err, result) => {
       release()
       if (err) cb(err)
-      else if (result.rows.length) cb(null, parseValue(result.rows[0].value, options))
+      else if (result.rows.length) cb(null, decodeValue(result.rows[0].value, options))
       else cb(new errors.NotFoundError('not found: ' + key)) // TODO: better message
     })
   })
@@ -213,9 +225,9 @@ PgDOWN.prototype._get = function (key, options, cb) {
 
 PgDOWN.operation = {}
 
-PgDOWN.operation.put = function (client, table, op, cb) {
+PgDOWN.operation.put = function (client, table, op, options, cb) {
   const sql = _putSql(table, op)
-  const args = [ op.key, op.value ]
+  const args = [ op.key, encodeValue(op.value, op.options, options) ]
   debug('put operation sql: %s %j', sql, args)
 
   client.query(sql, args, function (err) {
@@ -225,7 +237,7 @@ PgDOWN.operation.put = function (client, table, op, cb) {
   })
 }
 
-PgDOWN.operation.del = function (client, table, op, cb) {
+PgDOWN.operation.del = function (client, table, op, options, cb) {
   const sql = `DELETE FROM ${table} WHERE key = $1`
   const args = [ op.key ]
   debug('del operation sql: %s %j', sql, args)
@@ -253,7 +265,7 @@ PgDOWN.prototype._put = function (key, value, options, cb) {
   this._connect((err, client, release) => {
     if (err) return cb(err)
 
-    PgDOWN.operation.put(client, table, op, (err) => {
+    PgDOWN.operation.put(client, table, op, null, (err) => {
       release()
       cb(err)
     })
@@ -273,7 +285,7 @@ PgDOWN.prototype._del = function (key, options, cb) {
   this._connect((err, client, release) => {
     if (err) return cb(err)
 
-    PgDOWN.operation.del(client, table, op, (err) => {
+    PgDOWN.operation.del(client, table, op, null, (err) => {
       release()
       cb(err)
     })
@@ -306,11 +318,10 @@ PgDOWN.prototype._createWriteStream = function (options) {
   })
 
   const write = (op, cb) => {
-    // TODO: merge op w/ options
     const type = op.type || (op.value == null ? 'del' : 'put')
     const command = PgDOWN.operation[type]
     try {
-      command(client, table, op, cb)
+      command(client, table, op, options, cb)
     } catch (err) {
       cb(err)
     }
@@ -400,7 +411,7 @@ PgDOWN.prototype._createReadStream = function (options) {
 
   const query = new QueryStream(sql, args)
   const ts = through2.obj((d, enc, cb) => {
-    d.value = parseValue(d.value, options)
+    d.value = decodeValue(d.value, options)
     cb(null, d)
   })
 
