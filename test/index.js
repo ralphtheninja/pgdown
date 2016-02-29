@@ -1,2 +1,2 @@
-require('./json')
+// require('./json')
 require('./abstract-leveldown')

@@ -2,11 +2,16 @@ const inherits = require('inherits')
 const through2 = require('through2')
 const pg = require('pg')
 const QueryStream = require('pg-query-stream')
-const errors = require('level-errors')
-const AbstractLevelDOWN = require('abstract-stream-leveldown').AbstractStreamLevelDOWN
+const NotFoundError = require('level-errors').NotFoundError
+const ASL = require('abstract-stream-leveldown')
+const AbstractStreamLevelDOWN = ASL.AbstractStreamLevelDOWN
+const AbstractStreamChainedBatch = ASL.AbstractStreamChainedBatch
 const debug = require('debug')('pgdown')
 
 // const SQL = require('pg-template-tag')
+
+// reenable support for 'clear' batch op
+delete AbstractStreamChainedBatch.prototype._clear
 
 function PgDOWN (location) {
   if (!(this instanceof PgDOWN)) {
@@ -34,10 +39,10 @@ function PgDOWN (location) {
   // TODO: fix the sql to allow us to use extra path parts for schema name
   if (this._schema) throw new Error('schema paths NYI')
 
-  AbstractLevelDOWN.call(this, location)
+  AbstractStreamLevelDOWN.call(this, location)
 }
 
-inherits(PgDOWN, AbstractLevelDOWN)
+inherits(PgDOWN, AbstractStreamLevelDOWN)
 
 PgDOWN.prototype._connect = function (cb) {
   debug('##_connect: connecting: %j', this.pg.config)
@@ -107,8 +112,7 @@ PgDOWN.prototype._open = function (options, cb) {
       const ifNotExists = errorIfExists ? '' : 'IF NOT EXISTS '
       const schemaSql = this.pg.schema && `CREATE SCHEMA ${ifNotExists}${this.pg.schema};`
 
-      // key text CONSTRAINT idx_key PRIMARY KEY
-      // TODO: `value jsonb` for 'json' valueEncoding
+      // TODO: jsonb, bytea
       const tableSql = `
         CREATE TABLE ${ifNotExists}${this.pg.table} (
           key text PRIMARY KEY,
@@ -185,21 +189,38 @@ function _putSql (table, op) {
       // UPSERT
 }
 
-const decodeValue = (value, options) => {
-  debug('decodeValue: %j', value)
-  // NB: expects string values from pg for now
-  if (options && options.asBuffer === false) {
-    return String(value || '')
+// NB: expects string values from pg for now
+const decodeKey = (source, options) => {
+  debug('decodeKey: %j, options: %j', source, options)
+
+  if (source == null) return source
+
+  if (!options || options.keyAsBuffer === false || options.asBuffer === false) {
+    return String(source || '')
   } else {
-    return new Buffer(String(value || ''), 'utf-8')
+    return new Buffer(String(source || ''), 'utf-8')
   }
 }
 
-const encodeValue = (value, options, batchOptions) => {
-  debug('decodeValue: %j options: %j %j', value, options, batchOptions)
-  if (value == null) return value
-  // NB: stringify everything going into pg for now
-  return String(value)
+const decodeValue = (source, options) => {
+  debug('decodeValue: %j, options: %j', source, options)
+
+  if (source == null) return source
+
+  if (!options || options.valueAsBuffer === false || options.asBuffer === false) {
+    return String(source || '')
+  } else {
+    return new Buffer(String(source || ''), 'utf-8')
+  }
+}
+
+// NB: stringify everything going into pg for now
+const encode = (source, options, batchOptions) => {
+  debug('encode: %j options: %j %j', source, options, batchOptions)
+
+  // if (source == null) return source
+
+  return String(source || '')
 }
 
 PgDOWN.prototype._get = function (key, options, cb) {
@@ -208,7 +229,7 @@ PgDOWN.prototype._get = function (key, options, cb) {
   const table = this.pg.table
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
   const sql = `SELECT value::text FROM ${table} WHERE (key)=$1`
-  const args = [ key ]
+  const args = [ encode(key, options) ]
   debug('_get: sql %s %j', sql, args)
 
   this._connect((err, client, release) => {
@@ -218,7 +239,7 @@ PgDOWN.prototype._get = function (key, options, cb) {
       release()
       if (err) cb(err)
       else if (result.rows.length) cb(null, decodeValue(result.rows[0].value, options))
-      else cb(new errors.NotFoundError('not found: ' + key)) // TODO: better message
+      else cb(new NotFoundError('not found: ' + key)) // TODO: better message
     })
   })
 }
@@ -227,27 +248,25 @@ PgDOWN.operation = {}
 
 PgDOWN.operation.put = function (client, table, op, options, cb) {
   const sql = _putSql(table, op)
-  const args = [ op.key, encodeValue(op.value, op.options, options) ]
+  const args = [ encode(op.key, op, options), encode(op.value, op, options) ]
   debug('put operation sql: %s %j', sql, args)
 
   client.query(sql, args, function (err) {
     if (err) debug('put operation: error: %j', err)
-    // TODO: errors.WriteError?
     cb(err || null)
   })
 }
 
 PgDOWN.operation.del = function (client, table, op, options, cb) {
   const sql = `DELETE FROM ${table} WHERE key = $1`
-  const args = [ op.key ]
+  const args = [ encode(op.key, op, options) ]
   debug('del operation sql: %s %j', sql, args)
 
-  client.query(sql, [ op.key ], (err, result) => {
+  client.query(sql, args, (err, result) => {
     // TODO: reflect whether or not a row was deleted? errorIfMissing?
     //   if (op.errorIfMissing && !result.rows.length) throw ...
 
     if (err) debug('del operation: error: %j', err)
-    // TODO: errors.WriteError?
     cb(err || null)
   })
 }
@@ -298,18 +317,18 @@ PgDOWN.prototype._createWriteStream = function (options) {
   var client
 
   const ts = through2.obj((op, enc, cb) => {
-    if (client) write(op, cb)
+    if (client) push(op, cb)
 
     debug('initializing write stream')
     this._connect((err, _client, release) => {
       if (err) return cb(err)
 
       client = _client
-      ts.once('error', release).once('end', release)
+      ts.on('error', release).on('end', release)
 
       client.query('BEGIN', (err) => {
         if (err) return cb(err)
-        write(op, cb)
+        push(op, cb)
       })
     })
   }, (cb) => {
@@ -317,7 +336,7 @@ PgDOWN.prototype._createWriteStream = function (options) {
     submit(null, cb)
   })
 
-  const write = (op, cb) => {
+  const push = (op, cb) => {
     const type = op.type || (op.value == null ? 'del' : 'put')
     const command = PgDOWN.operation[type]
     try {
@@ -330,6 +349,9 @@ PgDOWN.prototype._createWriteStream = function (options) {
   const submit = (err, cb) => {
     const action = err ? 'ROLLBACK' : 'COMMIT'
     debug('batch submit action: %s', action)
+
+    // noop if no client, as no batch has been started
+    if (!client) return
 
     client.query(action, (dbErr) => {
       if (dbErr) debug('batch %s error: %j', action, dbErr)
@@ -376,7 +398,7 @@ function formatConstraints (constraints) {
 PgDOWN.prototype._createReadStream = function (options) {
   debug('##_createReadStream(options=%j)', options)
 
-  options = options || {}
+  this._options = options = options || {}
 
   this._count = 0
   this._limit = isNaN(options.limit) ? -1 : options.limit
@@ -411,6 +433,7 @@ PgDOWN.prototype._createReadStream = function (options) {
 
   const query = new QueryStream(sql, args)
   const ts = through2.obj((d, enc, cb) => {
+    d.key = decodeKey(d.key, options)
     d.value = decodeValue(d.value, options)
     cb(null, d)
   })
@@ -424,6 +447,14 @@ PgDOWN.prototype._createReadStream = function (options) {
   return ts
 }
 
+PgDOWN.prototype._chainedBatch = function () {
+  // patch ASL's chained batch to add _db property
+  const batch = AbstractStreamLevelDOWN.prototype._chainedBatch.call(this)
+  batch._db = this
+  return batch
+}
+
+// TODO: 'clear' operation?
 PgDOWN.prototype.drop = function (options, cb) {
   debug('#drop(options=%j, cb=%s)', options, !!cb)
   if (typeof options === 'function') {

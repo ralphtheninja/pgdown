@@ -138,7 +138,7 @@ test('crud', (t) => {
     }
   ]
 
-  const sorted = batch.slice().sort((a, b) => a.key < b.key ? -1 : 1)
+  const sorted = batch.slice().sort((a, b) => a.key < b.key ? -1 : (a.key > b.key ? 1 : 0))
 
   t.test('array batch', (t) => {
     db.batch(batch, (err) => {

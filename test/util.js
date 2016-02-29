@@ -2,6 +2,8 @@ const levelup = require('levelup')
 const pg = require('pg')
 const pgdown = require('../')
 
+pg.poolIdleTimeout = 2000
+
 const util = exports
 
 util._config = require('rc')('pgdown', {
@@ -21,6 +23,20 @@ util.setUp = (t) => {
 util.tearDown = (t) => {
   pg.end()
   t.end()
+}
+
+util.collectEntries = function (iterator, cb) {
+  const data = []
+  const next = () => {
+    iterator.next((err, key, value) => {
+      if (err) return cb(err)
+      if (!arguments.length) return iterator.end((err) => cb(err, data))
+
+      data.push({ key: key, value: value })
+      process.nextTick(next)
+    })
+  }
+  next()
 }
 
 util.location = (db, tbl) => `/${db || _db}/${tbl || (_tbl + (++util._idx))}`
