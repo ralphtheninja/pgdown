@@ -40,13 +40,17 @@ function PgDOWN (location) {
   if (parts.length) throw new Error('schema paths NYI')
 
   // remaining components represent schema namespace
-  // this._schema = parts.length ? this._escape(parts.join('__')) : ''
+  // this._schema = parts.length ? PgDOWN._escape(parts.join('__')) : ''
 
   // set qualified name
-  this._qname = this._escape(this._table)
+  this._qname = PgDOWN._escape(this._table)
   // TODO: if (this._schema) qname = this._schema + '.' + this._table, escaped
 
   // TODO: surface default `public` schema in opts?
+
+  // create a unique id to isolate connection pool to this specific db instance
+  // TODO: something less shite
+  pg.poolId = pg.poolId || ('' + Math.random()).slice(2)
 
   debug('pg options: %j, defaults: %j', pg, defaults)
 }
@@ -54,20 +58,22 @@ function PgDOWN (location) {
 inherits(PgDOWN, AbstractStreamLevelDOWN)
 
 // TODO: investigate this...
-PgDOWN.prototype._escape = function (name) {
-  return '"' + name.replace(/\"/g, '""') + '"'
-}
+PgDOWN._escape = (name) => '"' + name.replace(/\"/g, '""') + '"'
 
-PgDOWN.prototype._connect = function (cb) {
-  debug('_connect: pg options: %j', this.pg)
-  pglib.connect(this.pg, (err, client, release) => {
+PgDOWN._connect = function (options, cb) {
+  debug('# _connect(options = %j, cb = %s)', options, !!cb)
+  pglib.connect(options, (err, client, release) => {
     if (err) {
-      release(client)
+      release(err)
       return cb(err)
     }
 
     cb(null, client, release)
   })
+}
+
+PgDOWN.prototype._connect = function (cb) {
+  PgDOWN._connect(this.pg, cb)
 }
 
 // TODO: binary? parseInt8?
@@ -100,53 +106,54 @@ PgDOWN.prototype._open = function (options, cb) {
     if (options[key] !== undefined) pg[key] = options[key]
   })
 
-  // create a unique id to isolate connection pool to this specific db instance
-  // TODO: something less shite
-  pg.poolId = pg.poolId || ('' + Math.random()).slice(2)
-
   debug('_open: pg config: %j', pg)
 
+  const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
+  const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
+  const qname = this._qname
+  var sql = ''
 
-  const sql = (() => {
-    if (options.createIfMissing) {
-      const ifNotExists = errorIfExists ? '' : 'IF NOT EXISTS '
+  if (errorIfExists || !createIfMissing) {
+    // TODO: find a cleaner way to do this
+    sql += `
+      SELECT COUNT(*) from ${qname} LIMIT 1;
+    `
+  }
 
-      // TODO: support for jsonb, bytea using _serialize[Key|Value]
-      const kType = 'bytea'
-      const vType = 'bytea'
-      const table = this._escape(this._table)
-      const tableSql = `
-        CREATE TABLE ${ifNotExists}${table} (
-          key ${kType} PRIMARY KEY,
-          value ${vType}
-        );
-      `
+  // create associated schema along w/ table, if specified
+  if (createIfMissing && this._schema) {
+    sql += `
+      CREATE SCHEMA ${IF_NOT_EXISTS} ${PgDOWN._escape(this._schema)};
+    `
+  }
 
-      if (!this._schema) return tableSql
-
-      // create associated schema along w/ table, if specified
-      const schema = this._escape(schema)
-      return `
-        CREATE SCHEMA ${ifNotExists}${schema};
-      ` + tableSql
-    }
-
-    // asserts table existence
-    if (errorIfExists) return `SELECT COUNT(*) from ${this._qname} LIMIT 1;`
-  })()
+  if (createIfMissing) {
+    // TODO: support for jsonb, bytea using _serialize[Key|Value]
+    const kType = 'bytea'
+    const vType = 'bytea'
+    sql += `
+      CREATE TABLE ${IF_NOT_EXISTS} ${qname} (
+        key ${kType} PRIMARY KEY,
+        value ${vType}
+      );
+    `
+  }
 
   this._connect((err, client, release) => {
     if (err) return cb(err)
 
-    const done = (err) => {
-      if (err) debug('_open: pg client error: %j', err)
-      release(err)
-      cb(err)
-    }
-
     debug('_open: sql: %s', sql)
-    sql ? client.query(sql, done) : done()
+    client.query(sql, (err, result) => {
+      debug('_open: pg client: err: %j, result: %j', err, result)
+      release(err)
+
+      if (!err && !createIfMissing && errorIfExists) {
+        err = new Error('table exists: ' + qname)
+      }
+
+      cb(err || null)
+    })
   })
 }
 
@@ -202,10 +209,16 @@ PgDOWN.prototype._get = function (key, options, cb) {
     if (err) return cb(err)
 
     client.query(sql, args, (err, result) => {
-      release()
-      if (err) cb(err)
-      else if (result.rows.length) cb(null, decodeValue(result.rows[0].value, options))
-      else cb(new NotFoundError('not found: ' + key)) // TODO: better message
+      release(err)
+
+      if (err) {
+        cb(err)
+      } else if (result.rows.length) {
+        return cb(null, decodeValue(result.rows[0].value, options))
+      } else {
+        // TODO: better message
+        cb(new NotFoundError('not found: ' + key))
+      }
     })
   })
 }
@@ -250,8 +263,8 @@ PgDOWN.prototype._put = function (key, value, options, cb) {
     if (err) return cb(err)
 
     PgDOWN.operation.put(client, this._qname, op, null, (err) => {
-      release()
-      cb(err)
+      release(err)
+      cb(err || null)
     })
   })
 }
@@ -269,8 +282,8 @@ PgDOWN.prototype._del = function (key, options, cb) {
     if (err) return cb(err)
 
     PgDOWN.operation.del(client, this._qname, op, null, (err) => {
-      release()
-      cb(err)
+      release(err)
+      cb(err || null)
     })
   })
 }
@@ -291,8 +304,7 @@ PgDOWN.prototype._createWriteStream = function (options) {
       ts.once('error', (err) => {
         debug('_createWriteStream: stream err: %j', err)
         release(err)
-      })
-      .once('end', () => {
+      }).once('end', () => {
         debug('_createWriteStream: stream ended')
         release()
       })
@@ -462,23 +474,15 @@ PgDOWN.prototype._close = function (cb) {
   cb && cb()
 }
 
-// TODO: 'clear' operation?
-PgDOWN.prototype._drop = function (options, cb) {
-  debug('## _drop(options = %j, cb = %s)', options, !!cb)
-  if (typeof options === 'function') {
-    cb = options
-    options = {}
-  }
+PgDOWN.prototype._drop = function (cb) {
+  debug('## _drop(cb = %s)', !!cb)
 
   this._connect((err, client, release) => {
     if (err) return cb(err)
 
-    // const ifExists = options.errorIfExists ? '' : ' IF EXISTS'
-    const ifExists = ''
-
-    client.query(`DROP TABLE ${ifExists}${this._qname}`, (err) => {
-      release()
-      cb(err || null)
+    client.query(`DROP TABLE ${this._qname}`, (err) => {
+      release(err)
+      cb && cb(err || null)
     })
   })
 }
