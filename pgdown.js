@@ -8,8 +8,6 @@ const ASL = require('abstract-stream-leveldown')
 const AbstractStreamLevelDOWN = ASL.AbstractStreamLevelDOWN
 const AbstractStreamChainedBatch = ASL.AbstractStreamChainedBatch
 
-// const SQL = require('pg-template-tag')
-
 const debug = require('debug')('pgdown')
 
 function PgDOWN (location) {
@@ -67,14 +65,6 @@ PgDOWN.prototype._connect = function (cb) {
       release(client)
       return cb(err)
     }
-
-    // TODO: is this necessary?
-    client.on('error', (err) => {
-      debug('CLIENT ERROR EVENT: %j', err)
-      // release(client)
-      // NB: rethrowing for now, to sniff out when this gets invoked
-      throw err
-    })
 
     cb(null, client, release)
   })
@@ -137,7 +127,9 @@ PgDOWN.prototype._open = function (options, cb) {
 
       // create associated schema along w/ table, if specified
       const schema = this._escape(schema)
-      return `CREATE SCHEMA ${ifNotExists}${schema}; ` + tableSql
+      return `
+        CREATE SCHEMA ${ifNotExists}${schema};
+      ` + tableSql
     }
 
     // asserts table existence
@@ -153,7 +145,7 @@ PgDOWN.prototype._open = function (options, cb) {
       cb(err)
     }
 
-    debug('_open: sql: %j', sql)
+    debug('_open: sql: %s', sql)
     sql ? client.query(sql, done) : done()
   })
 }
@@ -296,11 +288,11 @@ PgDOWN.prototype._createWriteStream = function (options) {
       if (err) return cb(err)
 
       client = _client
-      ts.on('error', (err) => {
+      ts.once('error', (err) => {
         debug('_createWriteStream: stream err: %j', err)
         release(err)
       })
-      .on('end', () => {
+      .once('end', () => {
         debug('_createWriteStream: stream ended')
         release()
       })
@@ -441,7 +433,13 @@ PgDOWN.prototype._createReadStream = function (options) {
   this._connect((err, client, release) => {
     if (err) return ts.destroy(err)
     // create stream, release the client when stream is finished
-    client.query(query).on('error', release).on('end', release).pipe(ts)
+    client.query(query).once('error', (err) => {
+      debug('_createReadStream: pg client error: %j', err)
+      release(err)
+    }).once('end', () => {
+      debug('_createReadStream: pg client ended')
+      release()
+    }).pipe(ts)
   })
 
   return ts
