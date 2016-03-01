@@ -10,8 +10,7 @@ const debug = require('debug')('pgdown')
 
 // const SQL = require('pg-template-tag')
 
-// reenable support for 'clear' batch op
-delete AbstractStreamChainedBatch.prototype._clear
+const escapedName = (name) => '"' + name.replace(/\"/g, '""') + '"'
 
 function PgDOWN (location) {
   if (!(this instanceof PgDOWN)) {
@@ -45,7 +44,7 @@ function PgDOWN (location) {
 inherits(PgDOWN, AbstractStreamLevelDOWN)
 
 PgDOWN.prototype._connect = function (cb) {
-  debug('##_connect: connecting: %j', this.pg.config)
+  debug('## connect: connecting: %j', this.pg.config)
   pg.connect(this.pg.config, (err, client, release) => {
     if (err) {
       release(client)
@@ -75,8 +74,10 @@ const PG_KEYS = [
   'reapIntervalMillis'
 ]
 
+// PgDOWN.prototype._getOptions
+
 PgDOWN.prototype._open = function (options, cb) {
-  debug('##_open(options=%j)', options)
+  debug('## open(options=%j)', options)
 
   this.pg = {}
   const config = this.pg.config = {}
@@ -86,12 +87,9 @@ PgDOWN.prototype._open = function (options, cb) {
   if (options.database) throw new Error('database specified as db location')
   config.database = this._database
 
-  // TODO: escapement
+  this.pg.table = escapedName(this._table)
   if (this._schema) {
-    this.pg.schema = `"${this._schema}"`
-    this.pg.table = `"${this._schema}"."${this._table}"`
-  } else {
-    this.pg.table = `"${this._table}"`
+    this.pg.table = escapedName(this.pg._schema) + '.' + this.pg.table
   }
 
   // copy over pg other options
@@ -103,7 +101,7 @@ PgDOWN.prototype._open = function (options, cb) {
   // TODO: something less shite
   config.poolId = config.poolId || Math.random()
 
-  debug('##_open: pg config: %j', config)
+  debug('## open: pg config: %j', config)
 
   const errorIfExists = options.errorIfExists
 
@@ -115,8 +113,8 @@ PgDOWN.prototype._open = function (options, cb) {
       // TODO: jsonb, bytea
       const tableSql = `
         CREATE TABLE ${ifNotExists}${this.pg.table} (
-          key text PRIMARY KEY,
-          value text
+          key bytea PRIMARY KEY,
+          value bytea
         );
       `
 
@@ -143,7 +141,7 @@ PgDOWN.prototype._open = function (options, cb) {
 }
 
 PgDOWN.prototype._close = function (cb) {
-  debug('##_close(cb=%s)', !!cb)
+  debug('## close(cb=%s)', !!cb)
 
   if (this._closed) return process.nextTick(cb)
   debug('_close: ending client')
@@ -167,52 +165,28 @@ function _putSql (table, op) {
 
   // always do an upsert for now
   return UPSERT
-
-  // TODO: the below is a total shitshow -- probably not even worth bothering w/
-  // this tries to squeeze INSERT and UPDATE semantics from existing level opts
-  // would errorIfMissing be more sensical?
-
-  // if errorIfExists == false:
-    // if createIfMissing == true:
-      // INSERT
-    // else:
-      // UPDATE
-  // else if errorIfExists == true:
-    // if createIfMissing == false:
-      // error: bad params
-    // else:
-      // INSERT
-  // else:
-    // if createIfMissing == false:
-      // UPDATE
-    // else:
-      // UPSERT
 }
 
 // NB: expects string values from pg for now
 const decodeKey = (source, options) => {
   debug('decodeKey: %j, options: %j', source, options)
 
-  if (source == null) return source
-
-  if (!options || options.keyAsBuffer === false || options.asBuffer === false) {
-    return String(source || '')
-  } else {
-    return new Buffer(String(source || ''), 'utf-8')
+  if (!options || (options.asBuffer !== false && options.keyAsBuffer !== false)) {
+    return source
   }
+  return String(source || '')
 }
 
 const decodeValue = (source, options) => {
   debug('decodeValue: %j, options: %j', source, options)
 
-  if (source == null) return source
-
-  if (!options || options.valueAsBuffer === false || options.asBuffer === false) {
-    return String(source || '')
-  } else {
-    return new Buffer(String(source || ''), 'utf-8')
+  if (!options || (options.asBuffer !== false && options.valueAsBuffer !== false)) {
+    return source
   }
+  return String(source || '')
 }
+
+const isBuffer = PgDOWN.prototype._isBuffer
 
 // NB: stringify everything going into pg for now
 const encode = (source, options, batchOptions) => {
@@ -220,15 +194,16 @@ const encode = (source, options, batchOptions) => {
 
   // if (source == null) return source
 
-  return String(source || '')
+  if (isBuffer(source)) return source
+  else return new Buffer(source || '', 'utf8')
 }
 
 PgDOWN.prototype._get = function (key, options, cb) {
-  debug('##_get(key=%j, options=%j, cb=%s)', key, options, !!cb)
+  debug('## get(key=%j, options=%j, cb=%s)', key, options, !!cb)
 
   const table = this.pg.table
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
-  const sql = `SELECT value::text FROM ${table} WHERE (key)=$1`
+  const sql = `SELECT value::bytea FROM ${table} WHERE (key::bytea)=$1`
   const args = [ encode(key, options) ]
   debug('_get: sql %s %j', sql, args)
 
@@ -258,7 +233,7 @@ PgDOWN.operation.put = function (client, table, op, options, cb) {
 }
 
 PgDOWN.operation.del = function (client, table, op, options, cb) {
-  const sql = `DELETE FROM ${table} WHERE key = $1`
+  const sql = `DELETE FROM ${table} WHERE (key::bytea) = $1`
   const args = [ encode(op.key, op, options) ]
   debug('del operation sql: %s %j', sql, args)
 
@@ -272,7 +247,7 @@ PgDOWN.operation.del = function (client, table, op, options, cb) {
 }
 
 PgDOWN.prototype._put = function (key, value, options, cb) {
-  debug('##_put(key=%j, value=%j, options=%j, cb=%s)', key, value, options, !!cb)
+  debug('## put(key=%j, value=%j, options=%j, cb=%s)', key, value, options, !!cb)
 
   if (typeof cb !== 'function') {
     throw new Error('put() requires a callback argument')
@@ -292,7 +267,7 @@ PgDOWN.prototype._put = function (key, value, options, cb) {
 }
 
 PgDOWN.prototype._del = function (key, options, cb) {
-  debug('##_del(key=%j, options=%j, cb=%s)', key, options, !!cb)
+  debug('## del(key=%j, options=%j, cb=%s)', key, options, !!cb)
 
   if (typeof cb !== 'function') {
     throw new Error('del() requires a callback argument')
@@ -312,55 +287,83 @@ PgDOWN.prototype._del = function (key, options, cb) {
 }
 
 PgDOWN.prototype._createWriteStream = function (options) {
-  debug('##_createWriteStream(options=%j)', options)
+  debug('## createWriteStream(options=%j)', options)
   const table = this.pg.table
   var client
 
   const ts = through2.obj((op, enc, cb) => {
-    if (client) push(op, cb)
+    if (client) return push(op, cb)
 
-    debug('initializing write stream')
+    debug('_createWriteStream: initializing write stream')
     this._connect((err, _client, release) => {
       if (err) return cb(err)
 
       client = _client
-      ts.on('error', release).on('end', release)
+      ts.on('error', (err) => {
+        debug('_createWriteStream: stream err: %j', err)
+        release(err)
+      })
+      .on('end', () => {
+        debug('_createWriteStream: stream ended')
+        release()
+      })
 
       client.query('BEGIN', (err) => {
+        debug('_createWriteStream: begin transaction')
         if (err) return cb(err)
         push(op, cb)
       })
     })
   }, (cb) => {
-    debug('committing batch')
+    debug('_createWriteStream: committing batch')
     submit(null, cb)
   })
 
   const push = (op, cb) => {
+    debug('_createWriteStream: write batch op: %j', op)
     const type = op.type || (op.value == null ? 'del' : 'put')
     const command = PgDOWN.operation[type]
-    try {
-      command(client, table, op, options, cb)
-    } catch (err) {
-      cb(err)
-    }
+
+    if (!command) throw new Error('Unknown batch operation type: ' + type)
+
+    // TODO: try/catch around op?
+    command(client, table, op, options, cb)
   }
 
   const submit = (err, cb) => {
     const action = err ? 'ROLLBACK' : 'COMMIT'
-    debug('batch submit action: %s', action)
+    debug('_createWriteStream: submitting batch for %s', action)
 
     // noop if no client, as no batch has been started
     if (!client) return
 
     client.query(action, (dbErr) => {
-      if (dbErr) debug('batch %s error: %j', action, dbErr)
-      else debug('batch %s successful', action)
+      if (dbErr) debug('_createWriteStream: batch %s error: %j', action, dbErr)
+      else debug('_createWriteStream: batch %s successful', action)
       cb(dbErr || err)
     })
   }
 
   return ts
+}
+
+// reenable support for 'clear' batch op on chained batch
+AbstractStreamChainedBatch.prototype._clear = function () {
+  debug('_createWriteStream: clearing batch')
+  // TODO
+
+  // // signal that commit has been cleared
+  // this.emit('clear')
+}
+
+PgDOWN.prototype._chainedBatch = function () {
+  // patch ASL's chained batch to add _db property
+  const batch = AbstractStreamLevelDOWN.prototype._chainedBatch.call(this)
+
+  // add reference to db expected by AbstractLevelDOWN
+  batch._db = this
+
+  return batch
 }
 
 PgDOWN.comparator = {
@@ -385,7 +388,7 @@ function formatConstraints (constraints) {
     const v = constraints[k]
     const op = operators[k]
     if (op) {
-      clauses.push(`key${op}(${v})`)
+      clauses.push(`(key::bytea) ${op} (${v})`)
     } else if (op === 'or') {
       // TODO: just being lazy, but should fix up extra array wrapping cruft
       clauses.push(formatConstraints([ constraints[k] ]))
@@ -396,7 +399,7 @@ function formatConstraints (constraints) {
 }
 
 PgDOWN.prototype._createReadStream = function (options) {
-  debug('##_createReadStream(options=%j)', options)
+  debug('## createReadStream(options=%j)', options)
 
   this._options = options = options || {}
 
@@ -408,7 +411,7 @@ PgDOWN.prototype._createReadStream = function (options) {
   const clauses = []
   const args = []
 
-  clauses.push(`SELECT key, value::text FROM ${this.pg.table}`)
+  clauses.push(`SELECT key::bytea, value::bytea FROM ${this.pg.table}`)
 
   if (this._constraints) {
     args.push(this._constraints)
@@ -447,16 +450,9 @@ PgDOWN.prototype._createReadStream = function (options) {
   return ts
 }
 
-PgDOWN.prototype._chainedBatch = function () {
-  // patch ASL's chained batch to add _db property
-  const batch = AbstractStreamLevelDOWN.prototype._chainedBatch.call(this)
-  batch._db = this
-  return batch
-}
-
 // TODO: 'clear' operation?
 PgDOWN.prototype.drop = function (options, cb) {
-  debug('#drop(options=%j, cb=%s)', options, !!cb)
+  debug('## drop(options=%j, cb=%s)', options, !!cb)
   if (typeof options === 'function') {
     cb = options
     options = {}

@@ -1,6 +1,6 @@
 const levelup = require('levelup')
 const pg = require('pg')
-const pgdown = require('../')
+const PgDOWN = require('../')
 
 pg.poolIdleTimeout = 2000
 
@@ -8,7 +8,7 @@ const util = exports
 
 util._config = require('rc')('pgdown', {
   database: 'postgres',
-  table: 'pgdown_test'
+  table: 'pgdown_test_'
 })
 
 const _db = util._config.database
@@ -17,9 +17,10 @@ const _tbl = util._config.table
 util._idx = 0
 
 util.setUp = (t) => {
-  // TODO: drop table
+  // TODO: hook PgDOWN#open to drop table first
   t.end()
 }
+
 util.tearDown = (t) => {
   pg.end()
   t.end()
@@ -50,7 +51,7 @@ function factory (location, options) {
   }
 
   options = options || {}
-  options.db = pgdown
+  options.db = PgDOWN
 
   return levelup(location, options)
 }

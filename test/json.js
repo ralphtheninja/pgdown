@@ -9,6 +9,7 @@ function pgupJSON (location, options) {
     location = null
   }
   options = options || {}
+  options.keyEncoding = 'utf8'
   options.valueEncoding = 'json'
 
   return util.factory(location, options)
