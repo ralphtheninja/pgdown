@@ -1,6 +1,7 @@
 const after = require('after')
+const levelup = require('levelup')
 const test = require('tape')
-const pgdown = require('../')
+const PgDOWN = require('../')
 const util = require('./util')
 
 function pgupJSON (location, options) {
@@ -8,73 +9,14 @@ function pgupJSON (location, options) {
     options = location
     location = null
   }
+
   options = options || {}
+  options.db = PgDOWN
   options.keyEncoding = 'utf8'
   options.valueEncoding = 'json'
 
-  return util.factory(location, options)
+  return levelup(location, options)
 }
-
-test('raw pgdown', (t) => {
-  const db = pgdown(util.location())
-
-  t.test('defaults', (t) => {
-    t.equal(db._database, util._config.database, 'test database')
-    t.equal(db._table, util._config.table + util._idx, 'test table')
-    t.equal(db._schema, null, 'no schema')
-    t.end()
-  })
-
-  t.test('open', (t) => {
-    db.open(t.end)
-  })
-
-  t.test('drop', (t) => {
-    db.drop(t.end)
-  })
-
-  t.test('close', (t) => {
-    db.close(t.end)
-  })
-})
-
-test('open', (t) => {
-  t.test('invalid db name', (t) => {
-    const badDb = 'pg_bad_db_'
-    const db = pgdown(util.location(badDb))
-    t.equal(db._database, badDb, 'bad db name')
-
-    db.open((err) => {
-      t.ok(err, 'invalid db name throws')
-      t.end()
-    })
-  })
-
-  t.test('invalid table name', (t) => {
-    const badTable = 'bad\0_table_'
-    const db = pgdown(util.location(null, badTable))
-    t.equal(db._table, badTable, 'bad table name')
-
-    db.open((err) => {
-      t.ok(err, 'invalid table name throws')
-      t.end()
-    })
-  })
-
-  // t.test('createIfMissing', (t) => {
-  //   t.test('when true', (t) => {
-  //     const db = pgupJSON(util.location(), {
-  //       createIfMissing: true
-  //     })
-  //   })
-
-  //   t.test('when false', (t) => {
-  //     const db = pgupJSON(util.location(), {
-  //       createIfMissing: false
-  //     })
-  //   })
-  // })
-})
 
 test('crud', (t) => {
   const db = pgupJSON(util.location())
@@ -83,7 +25,7 @@ test('crud', (t) => {
     db.open((err) => {
       if (err) return t.end(err)
 
-      db.db.drop((err) => {
+      db.db._drop((err) => {
         if (err) return t.end(err)
         db.close(t.end)
       })

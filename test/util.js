@@ -1,29 +1,22 @@
-const levelup = require('levelup')
-const pg = require('pg')
-const PgDOWN = require('../')
+const pglib = require('pg')
 
-pg.poolIdleTimeout = 2000
+pglib.defaults.poolIdleTimeout = 2000
 
 const util = exports
 
-util._config = require('rc')('pgdown', {
-  database: 'postgres',
-  table: 'pgdown_test_'
-})
+util._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
 
-const _db = util._config.database
-const _tbl = util._config.table
-
-util._idx = 0
+util._count = 0
 
 util.setUp = (t) => {
+  pglib.end()
+
   // TODO: hook PgDOWN#open to drop table first
   t.end()
 }
 
 util.tearDown = (t) => {
-  pg.end()
-  t.end()
+  util.setUp(t)
 }
 
 util.collectEntries = function (iterator, cb) {
@@ -40,18 +33,4 @@ util.collectEntries = function (iterator, cb) {
   next()
 }
 
-util.location = (db, tbl) => `/${db || _db}/${tbl || (_tbl + (++util._idx))}`
-
-util.factory = factory
-
-function factory (location, options) {
-  if (typeof location !== 'string') {
-    options = location
-    location = null
-  }
-
-  options = options || {}
-  options.db = PgDOWN
-
-  return levelup(location, options)
-}
+util.location = (loc) => loc || (util._prefix + (++util._count))

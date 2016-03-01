@@ -11,6 +11,7 @@ require('abstract-leveldown/abstract/leveldown-test').args(pgdown, test, util)
 
 require('abstract-leveldown/abstract/open-test').args(pgdown, test, util)
 require('abstract-leveldown/abstract/open-test').open(pgdown, test, util)
+// require('abstract-leveldown/abstract/open-test').all(pgdown, test, util)
 
 require('abstract-leveldown/abstract/put-test').all(pgdown, test, util)
 
