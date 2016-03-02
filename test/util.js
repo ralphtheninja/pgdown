@@ -1,5 +1,6 @@
 const pglib = require('pg')
 const PgDOWN = require('../')
+const debug = require('debug')('pgdown')
 
 pglib.defaults.poolIdleTimeout = 2000
 
@@ -15,8 +16,6 @@ util.location = (loc) => {
 
 util.setUp = (t) => {
   pglib.end()
-
-  // TODO: hook PgDOWN#open to drop table first
   t.end()
 }
 
@@ -27,11 +26,21 @@ util.tearDown = (t) => {
 util.collectEntries = function (iterator, cb) {
   const data = []
   const next = () => {
+    debug('util collectionEntries: nexting')
     iterator.next((err, key, value) => {
+      debug('util collectionEntries: next result: %j, %j, %j', err, key, value)
       if (err) return cb(err)
-      if (!arguments.length) return iterator.end((err) => cb(err, data))
 
+      if (!arguments.length) {
+        debug('util collectionEntries: ending')
+        return process.nextTick(() => {
+          iterator.end((err) => cb(err, data))
+        })
+      }
+
+      debug('util collectionEntries: pushing %j, %j', key, value)
       data.push({ key: key, value: value })
+
       process.nextTick(next)
     })
   }
@@ -41,20 +50,18 @@ util.collectEntries = function (iterator, cb) {
 // hack _open to drop tables at first open
 const dropped = {}
 
-const _open = PgDOWN.prototype._open
+const _PgDOWN_open = PgDOWN.prototype._open
 PgDOWN.prototype._open = function (options, cb) {
   const table = this._table
 
   if (table !== util._last || dropped[table]) {
-    return _open.call(this, options, cb)
+    return _PgDOWN_open.call(this, options, cb)
   }
 
   this._drop((err) => {
     if (err && err.routine !== 'DropErrorMsgNonExistent') return cb(err)
 
     dropped[table] = true
-    process.nextTick(() => {
-      _open.call(this, options, cb)
-    })
+    _PgDOWN_open.call(this, options, cb)
   })
 }

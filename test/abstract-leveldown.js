@@ -24,6 +24,6 @@ require('abstract-leveldown/abstract/put-get-del-test').all(pgdown, test, util, 
 // require('abstract-leveldown/abstract/ranges-test').all(pgdown, test, util)
 
 // require('abstract-leveldown/abstract/batch-test').all(pgdown, test, util)
-// require('abstract-leveldown/abstract/chained-batch-test').all(pgdown, test, util)
+require('abstract-leveldown/abstract/chained-batch-test').all(pgdown, test, util)
 
 require('abstract-leveldown/abstract/close-test').close(pgdown, test, util)
