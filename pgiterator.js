@@ -26,7 +26,7 @@ function _constraintSql (constraints) {
   return clauses.filter(Boolean).join(' AND ')
 }
 
-function PgIterator(db, options) {
+function PgIterator (db, options) {
   AbstractIterator.call(this, db)
 
   this._keyAsBuffer = options.keyAsBuffer
@@ -62,7 +62,7 @@ function PgIterator(db, options) {
   this._connecting = true
   db._pool.acquire((err, client) => {
     this._connecting = false
-    if (err) return this._error = err
+    if (err) return (this._error = err)
 
     this._client = client
     this._cursor = client.query(new Cursor(sql, params))

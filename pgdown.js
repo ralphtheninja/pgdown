@@ -223,10 +223,9 @@ PgDOWN.prototype._close = function (cb) {
 
   const pool = this._pool
   // debug('_close: draining client pool: %j', pool)
-  // pool.drain(() => {
-    debug('_close: destroying pool resources')
-    pool.destroyAllNow(cb)
-  // })
+  // pool.drain(() => { ...
+  debug('_close: destroying pool resources')
+  pool.destroyAllNow(cb)
 }
 
 PgDOWN.prototype._drop = function (cb) {

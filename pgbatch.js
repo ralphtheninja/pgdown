@@ -2,14 +2,14 @@ const inherits = require('inherits')
 const AbstractChainedBatch = require('abstract-leveldown/abstract-chained-batch')
 const debug = require('debug')('pgdown')
 
-function PgBatch(db) {
+function PgBatch (db) {
   AbstractChainedBatch.call(this, db)
 
   this._connecting = true
   db._pool.connect((err, client) => {
     this._connecting = false
 
-    if (err) return this._error = err
+    if (err) return (this._error = err)
     this._client = client
 
     client.query('BEGIN', (err) => {
@@ -28,10 +28,12 @@ PgBatch.prototype._flush = function () {
   const qname = this._db.qname
   const client = this._client
   if (client) {
-    var op
-    while (op = this._operations.shift()) {
+    const ops = this._operations
+    const commands = PgBatch._commands
+    while (ops.length) {
+      const op = ops.shift()
       const type = op.type || (op.value == null ? 'del' : 'put')
-      const command = PgBatch._commands[type]
+      const command = commands[type]
       if (!command) throw new Error('Unknown operation in batch: ' + type)
       command(client, qname, op, (err) => {
         if (err) this._error = err
@@ -53,7 +55,7 @@ PgBatch.prototype._del = function (key) {
 PgBatch.prototype._clear = function () {
   if (this._error) throw this._error
 
-  if (!this._client) return 
+  if (!this._client) return
 
   // roll back and begin a new transaction
   this._client.query('ROLLBACK; BEGIN', (err) => {
@@ -64,14 +66,15 @@ PgBatch.prototype._clear = function () {
 PgBatch.prototype._write = function (cb) {
   this._flush()
 
-  if (!this._client) {
-    // nothing to do
-    process.nextTick(cb)
-  } else {
+  const client = this._client
+  if (client) {
     // commit transaction
     client.query('COMMIT', (err) => {
       cb(err || null)
     })
+  } else {
+    // nothing to do
+    process.nextTick(cb)
   }
 }
 
