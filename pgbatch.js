@@ -112,11 +112,12 @@ PgBatch.prototype._setError = function (err) {
 }
 
 PgBatch.prototype._close = function (err) {
-  if (err || this._error) {
-    this._pool.destroy(this._client)
-  } else {
+  if (!err && !this._error) {
     this._pool.release(this._client)
+  } else {
+    this._pool.destroy(this._client)
   }
+  return err || this._error
 }
 
 PgBatch._commands = {}

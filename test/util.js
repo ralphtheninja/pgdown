@@ -1,6 +1,5 @@
 const pglib = require('pg')
 const PgDOWN = require('../')
-const debug = require('debug')('pgdown')
 
 const util = exports
 
@@ -24,19 +23,13 @@ util.tearDown = (t) => {
 util.collectEntries = function (iterator, cb) {
   const data = []
   const next = () => {
-    debug('util collectionEntries: nexting')
     iterator.next((err, key, value) => {
-      debug('util collectionEntries: next result: %j, %j, %j', err, key, value)
       if (err) return cb(err)
 
       if (!arguments.length) {
-        debug('util collectionEntries: ending')
-        return process.nextTick(() => {
-          iterator.end((err) => cb(err, data))
-        })
+        return iterator.end((err) => cb(err, data))
       }
 
-      debug('util collectionEntries: pushing %j, %j', key, value)
       data.push({ key: key, value: value })
 
       process.nextTick(next)

@@ -31,8 +31,9 @@ function PgIterator (db, options) {
 
   this._keyAsBuffer = options.keyAsBuffer
   this._valueAsBuffer = options.valueAsBuffer
+  this._pool = db._pool
 
-  const params = []
+  const params = this._params = []
   const clauses = []
   clauses.push(`SELECT key, value FROM ${db._qname}`)
 
@@ -56,23 +57,8 @@ function PgIterator (db, options) {
   //   clauses.push('OFFSET $' + params.length)
   // }
 
-  const sql = clauses.join(' ')
+  const sql = this._command = clauses.join(' ')
   debug('_iterator: sql: %s %j', sql, params)
-
-  this._connecting = true
-  db._pool.acquire((err, client) => {
-    this._connecting = false
-    if (err) return (this._error = err)
-
-    this._client = client
-    this._cursor = client.query(new Cursor(sql, params))
-
-    this._fillRowBuffer((err, key, value) => {
-      // TODO: tragic...
-      if (this._firstCb) this._firstCb(err, key, value)
-      else this._firstV = [ err, key, value ]
-    })
-  })
 }
 
 inherits(PgIterator, AbstractIterator)
@@ -86,69 +72,59 @@ PgIterator._comparators = {
   ne: '<>'
 }
 
-PgIterator.prototype._rowBufferSize = 100
+PgIterator._deserialize = (source, asBuffer) => {
+  return asBuffer ? source : String(source || '')
+}
 
-PgIterator.prototype._sendBufferedRow = function (cb) {
-  // TODO: kill me... please...
-  const firstV = this._firstV
-  if (firstV) {
-    this._firstV = null
-    return cb.apply(null, firstV)
-  }
+PgIterator.prototype._windowSize = 100
 
-  const row = this._rowBuffer.shift()
-  debug('iterator - row: %j', row)
-
+PgIterator.prototype._write = function (row, cb) {
   const key = PgIterator._deserialize(row.key, this._keyAsBuffer)
   const value = PgIterator._deserialize(row.key, this._valueAsBuffer)
-  debug('iterator - deserialized key: %j, value: %j', key, value)
-
   cb(null, key, value)
 }
 
-PgIterator.prototype._fillRowBuffer = function (cb) {
-  this._cursor.read(this._rowBufferSize, (err, rows) => {
-    debug('_cursor read result: %j, %j', err, rows)
-    if (err) return cb(err)
-
-    this._rowBuffer = rows
-    if (rows.length) {
-      this._sendBufferedRow(cb)
-    } else {
-      cb()
-    }
-  })
-}
-
 PgIterator.prototype._next = function (cb) {
-  debug('# PgIterator _next (cb = %s)', !!cb)
-  if (this._error) {
-    this.db._pool.destroy(this._client)
-    process.nextTick(() => cb(this._error))
-  } else if (this._rowBuffer && this._rowBuffer.length) {
-    this._sendBufferedRow(cb)
-  } else if (this._client) {
-    this._fillRowBuffer(cb)
-  } else {
-    this._firstCb = cb
+  const client = this._client
+  if (!client) {
+    return this._pool.acquire((err, client) => {
+      if (err) return this._close(err, cb)
+
+      this._client = client
+      this._next(cb)
+    })
   }
+
+  if (this._cursor) {
+    const nextRow = this._rows && this._rows.shift()
+    if (nextRow) return this._write(nextRow, cb)
+  } else {
+    this._cursor = this._client.query(new Cursor(this._command, this._params))
+  }
+
+  this._cursor.read(this._windowSize, (err, rows) => {
+    if (err) return this._close(err, cb)
+
+    this._rows = rows
+    const firstRow = rows.shift()
+    firstRow ? this._write(firstRow, cb) : this._close(null, cb)
+  })
 }
 
 PgIterator.prototype._end = function (cb) {
   debug('# PgIterator _end (cb = %s)', !!cb)
-
-  this.db._pool.destroy(this._client)
-  if (this._error) {
-    process.nextTick(() => cb(this._error))
-  } else {
-    this._cursor.close(cb)
-  }
+  this._close(null, cb)
 }
 
-PgIterator._deserialize = (source, asBuffer) => {
-  debug('# _deserialize (source = %j, asBuffer: %s)', source, asBuffer)
-
-  return asBuffer ? source : String(source || '')
+PgIterator.prototype._close = function (err, cb) {
+  // TODO: close cursor?
+  if (err) {
+    this._pool.destroy(this._client)
+    cb(err)
+  } else {
+    this._pool.release(this._client)
+    cb()
+  }
 }
 
 module.exports = PgIterator
