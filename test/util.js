@@ -4,6 +4,7 @@ const PgDOWN = require('../')
 const util = exports
 
 util._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
+pglib.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
 
 util._count = 0
 
