@@ -27,7 +27,9 @@ util.collectEntries = function (iterator, cb) {
       if (err) return cb(err)
 
       if (!arguments.length) {
-        return iterator.end((err) => cb(err, data))
+        return process.nextTick(() => {
+          iterator.end((err) => cb(err, data))
+        })
       }
 
       data.push({ key: key, value: value })

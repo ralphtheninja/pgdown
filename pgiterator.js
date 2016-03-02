@@ -84,14 +84,14 @@ PgIterator.prototype._write = function (row, cb) {
   cb(null, key, value)
 }
 
-PgIterator.prototype._next = function (cb) {
+PgIterator.prototype._read = function (cb) {
   const client = this._client
   if (!client) {
     return this._pool.acquire((err, client) => {
       if (err) return this._close(err, cb)
 
       this._client = client
-      this._next(cb)
+      this._read(cb)
     })
   }
 
@@ -109,6 +109,10 @@ PgIterator.prototype._next = function (cb) {
     const firstRow = rows.shift()
     firstRow ? this._write(firstRow, cb) : this._close(null, cb)
   })
+}
+
+PgIterator.prototype._next = function (cb) {
+  this._read(cb)
 }
 
 PgIterator.prototype._end = function (cb) {
