@@ -6,14 +6,20 @@ const PgIterator = require('./pgiterator')
 const PgBatch = require('./pgbatch')
 const debug = require('debug')('pgdown')
 
+const isBuffer = AbstractLevelDOWN.prototype._isBuffer
+
+function _serialize (s) {
+  return isBuffer(s) ? s : (s == null ? '' : String(s))
+}
+
 AbstractLevelDOWN.prototype._serializeKey = function (key) {
-  return this._isBuffer(key) ? key
-    : key == null ? '' : String(key)
+  debug('## _serializeKey (key = %j)', key)
+  return _serialize(key)
 }
 
 AbstractLevelDOWN.prototype._serializeValue = function (value) {
-  return this._isBuffer(value) || process.browser ? value
-    : value == null ? '' : String(value)
+  debug('## _serializeValue (value = %j)', value)
+  return _serialize(value)
 }
 
 function PgDOWN (location) {
@@ -187,7 +193,8 @@ PgDOWN.prototype._put = function (key, value, options, cb) {
   pool.acquire((err, client) => {
     if (err) return cb(err)
 
-    PgBatch._commands.put(client, this._qname, key, value, (err) => {
+    const op = { type: 'put', key: key, value: value }
+    PgBatch._commands.put(client, this._qname, op, (err) => {
       err ? pool.destroy(client) : pool.release(client)
       cb(err || null)
     })
@@ -201,11 +208,32 @@ PgDOWN.prototype._del = function (key, options, cb) {
   pool.acquire((err, client) => {
     if (err) return cb(err)
 
-    PgBatch._commands.del(client, this._qname, key, (err) => {
+    const op = { type: 'del', key: key }
+    PgBatch._commands.del(client, this._qname, op, (err) => {
       err ? pool.destroy(client) : pool.release(client)
       cb(err || null)
     })
   })
+}
+
+PgDOWN.prototype._batch = function (ops, options, cb) {
+  var batch = this._chainedBatch()
+
+  ops.forEach((op) => {
+    try {
+      if (op.type === 'del') {
+        batch._del(op.key, options)
+      } else if (op.type === 'put') {
+        batch._put(op.key, op.value, options)
+      } else {
+        debug('_batch: unknown operation: %j', op)
+      }
+    } catch (err) {
+      process.nextTick(() => cb(err))
+    }
+  })
+
+  batch._write(cb)
 }
 
 PgDOWN.prototype._chainedBatch = function () {

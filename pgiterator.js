@@ -34,7 +34,7 @@ function PgIterator (db, options) {
 
   const params = []
   const clauses = []
-  clauses.push(`SELECT key, value FROM ${this._qname}`)
+  clauses.push(`SELECT key, value FROM ${db._qname}`)
 
   const constraints = _constraintSql(options)
   if (constraints) {
@@ -121,7 +121,7 @@ PgIterator.prototype._fillRowBuffer = function (cb) {
 }
 
 PgIterator.prototype._next = function (cb) {
-  debug('# PgIterator next (cb = %s)', cb)
+  debug('# PgIterator _next (cb = %s)', !!cb)
   if (this._error) {
     this.db._pool.destroy(this._client)
     process.nextTick(() => cb(this._error))
@@ -135,7 +135,7 @@ PgIterator.prototype._next = function (cb) {
 }
 
 PgIterator.prototype._end = function (cb) {
-  debug('# PgIterator end (cb = %s)', cb)
+  debug('# PgIterator _end (cb = %s)', !!cb)
 
   this.db._pool.destroy(this._client)
   if (this._error) {

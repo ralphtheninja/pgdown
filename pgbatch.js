@@ -5,17 +5,22 @@ const debug = require('debug')('pgdown')
 function PgBatch (db) {
   AbstractChainedBatch.call(this, db)
 
+  this._qname = db._qname
   this._connecting = true
-  db._pool.connect((err, client) => {
+
+  const pool = this._pool = db._pool
+  pool.acquire((err, client) => {
     this._connecting = false
 
-    if (err) return (this._error = err)
+    if (err) return this._setError(err)
     this._client = client
 
     client.query('BEGIN', (err) => {
-      debug('PgBatch - begin transaction, %j', err)
-      if (err) throw err
+      debug('PgBatch - begin transaction (err = %j)', err)
+      this._setError(err)
       this._flush()
+    }).on('error', (err) => {
+      this._setError(err)
     })
   })
 }
@@ -23,53 +28,74 @@ function PgBatch (db) {
 inherits(PgBatch, AbstractChainedBatch)
 
 PgBatch.prototype._flush = function () {
-  if (this._error) throw this._error
-
-  const qname = this._db.qname
+  const qname = this._qname
   const client = this._client
+  const ops = this._operations
+
+  debug('# PgBatch flush (ops: %s, client: %s, err: %j)', ops.length, !!client, this._error)
+
   if (client) {
-    const ops = this._operations
     const commands = PgBatch._commands
     while (ops.length) {
       const op = ops.shift()
-      const type = op.type || (op.value == null ? 'del' : 'put')
-      const command = commands[type]
-      if (!command) throw new Error('Unknown operation in batch: ' + type)
-      command(client, qname, op, (err) => {
-        if (err) this._error = err
-      })
+      const command = commands[op.type]
+      if (command) {
+        command(client, qname, op)
+      } else {
+        const err = new Error('Unknown operation in batch: ' + op.type)
+        return this._setError(err)
+      }
     }
   }
 }
 
 PgBatch.prototype._put = function (key, value) {
-  this._operations.push({ key: key })
+  debug('# PgBatch _put(key = %j, value = %j)', key, value)
+  this._operations.push({ type: 'put', key: key, value: value })
   this._flush()
 }
 
 PgBatch.prototype._del = function (key) {
-  this._operations.push({ key: key })
+  debug('# PgBatch _put(key = %j)', key)
+  this._operations.push({ type: 'del', key: key })
   this._flush()
 }
 
 PgBatch.prototype._clear = function () {
-  if (this._error) throw this._error
-
+  debug('# PgBatch _clear()')
   if (!this._client) return
 
+  // TODO: if this._error, destroy and recreate client?
+
   // roll back and begin a new transaction
-  this._client.query('ROLLBACK; BEGIN', (err) => {
-    if (err) this._error = err
+  const client = this._client
+  client.query('ROLLBACK', (err) => {
+    if (err) return this._setError(err)
+
+    client.query('BEGIN', (err) => {
+      debug('PgBatch - begin transaction (err = %j)', err)
+      this._setError(err)
+      this._flush()
+    }).on('error', (err) => {
+      this._setError(err)
+    })
   })
 }
 
 PgBatch.prototype._write = function (cb) {
-  this._flush()
+  debug('# PgBatch _write(cb = %s)', !!cb)
+  try {
+    this._flush()
+  } catch (err) {
+    debug('WRITE FAIL %j', err)
+    return process.nextTick(() => cb(err))
+  }
 
   const client = this._client
   if (client) {
     // commit transaction
     client.query('COMMIT', (err) => {
+      this._close(err)
       cb(err || null)
     })
   } else {
@@ -78,37 +104,42 @@ PgBatch.prototype._write = function (cb) {
   }
 }
 
-function _putSql (qname, op) {
-  const INSERT = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
-  const UPSERT = INSERT + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  // const UPDATE = `UPDATE ${qname} SET value=($2) WHERE key=($1)'`
+PgBatch.prototype._setError = function (err) {
+  if (err) {
+    debug('# PgBatch error: %j', err)
+    if (!this._error) this._error = err
+  }
+}
 
-  // always do an upsert for now
-  return UPSERT
+PgBatch.prototype._close = function (err) {
+  if (err || this._error) {
+    this._pool.destroy(this._client)
+  } else {
+    this._pool.release(this._client)
+  }
 }
 
 PgBatch._commands = {}
 
-PgBatch._commands.put = function (client, qname, key, value, cb) {
-  const sql = _putSql(qname, key, value)
-  const params = [ key, value ]
+PgBatch._commands.put = function (client, qname, op, cb) {
+  const INSERT = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
+  const UPSERT = INSERT + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
+  // const UPDATE = `UPDATE ${qname} SET value=($2) WHERE key=($1)'`
+
+  // always an upsert for now
+  const sql = UPSERT
+  const params = [ op.key, op.value ]
   debug('put command sql: %s %j', sql, params)
 
-  client.query(sql, params, function (err) {
-    if (err) debug('put command: error: %j', err)
-    cb(err || null)
-  })
+  return client.query(sql, params, cb)
 }
 
-PgBatch._commands.del = function (client, qname, key, cb) {
+PgBatch._commands.del = function (client, qname, op, cb) {
   const sql = `DELETE FROM ${qname} WHERE (key) = $1`
-  const params = [ key ]
+  const params = [ op.key ]
   debug('del command sql: %s %j', sql, params)
 
-  client.query(sql, params, (err) => {
-    if (err) debug('del command: error: %j', err)
-    cb(err || null)
-  })
+  return client.query(sql, params, cb)
 }
 
 // PgDOWN.prototype._createWriteStream = function (options) {

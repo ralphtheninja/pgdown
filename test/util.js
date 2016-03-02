@@ -2,8 +2,6 @@ const pglib = require('pg')
 const PgDOWN = require('../')
 const debug = require('debug')('pgdown')
 
-pglib.defaults.poolIdleTimeout = 2000
-
 const util = exports
 
 util._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
@@ -53,6 +51,9 @@ const dropped = {}
 const _PgDOWN_open = PgDOWN.prototype._open
 PgDOWN.prototype._open = function (options, cb) {
   const table = this._table
+
+  // use a lower default pool idle timeout
+  options.poolIdleTimeout = options.poolIdleTimeout || 2000
 
   if (table !== util._last || dropped[table]) {
     return _PgDOWN_open.call(this, options, cb)
