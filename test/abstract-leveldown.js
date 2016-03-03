@@ -23,14 +23,11 @@ require('abstract-leveldown/abstract/get-test').all(PgDOWN, test, common)
 
 require('abstract-leveldown/abstract/put-get-del-test').all(PgDOWN, test, common, buffer)
 
+require('abstract-leveldown/abstract/iterator-test').all(PgDOWN, test, common)
+
 require('abstract-leveldown/abstract/ranges-test').all(PgDOWN, test, common)
 
 require('abstract-leveldown/abstract/batch-test').all(PgDOWN, test, common)
-
-// // TODO: snapshot isolation
-const iterators = require('abstract-leveldown/abstract/iterator-test')
-iterators.snapshot = function () {}
-iterators.all(PgDOWN, test, common)
 
 // NB: hack chained batch to keep operations around for abstract-leveldown tests
 const PgChainedBatch = require('../pg-chained-batch')
