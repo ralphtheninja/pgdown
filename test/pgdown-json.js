@@ -2,6 +2,7 @@ const after = require('after')
 const levelup = require('levelup')
 const test = require('tape')
 const PgDOWN = require('../')
+const util = require('../util')
 const common = require('./_common')
 
 function pgupJSON (location, options) {
@@ -25,7 +26,7 @@ test('crud', (t) => {
     db.open((err) => {
       if (err) return t.end(err)
 
-      db.db._drop((err) => {
+      util.drop(db.db, (err) => {
         if (err) return t.end(err)
         db.close(t.end)
       })
