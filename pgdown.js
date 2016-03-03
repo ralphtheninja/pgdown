@@ -1,26 +1,12 @@
+'use strict'
+
 const inherits = require('inherits')
-const pglib = require('pg')
 const AbstractLevelDOWN = require('abstract-leveldown/abstract-leveldown')
-const NotFoundError = require('level-errors').NotFoundError
-const PgIterator = require('./pgiterator')
-const PgBatch = require('./pgbatch')
+const util = require('./util')
+const PgIterator = require('./pg-iterator')
+const PgChainedBatch = require('./pg-chained-batch')
 const debug = require('debug')('pgdown')
-
-const isBuffer = AbstractLevelDOWN.prototype._isBuffer
-
-function _serialize (s) {
-  return isBuffer(s) ? s : (s == null ? '' : String(s))
-}
-
-AbstractLevelDOWN.prototype._serializeKey = function (key) {
-  debug('## _serializeKey (key = %j)', key)
-  return _serialize(key)
-}
-
-AbstractLevelDOWN.prototype._serializeValue = function (value) {
-  debug('## _serializeValue (value = %j)', value)
-  return _serialize(value)
-}
+const debugv = require('debug')('pgdown:verbose')
 
 function PgDOWN (location) {
   if (!(this instanceof PgDOWN)) {
@@ -36,103 +22,109 @@ function PgDOWN (location) {
   const table = this._table = parts.pop()
   if (!table) throw new Error('location must specify table name')
 
-  const defaults = pglib.defaults
-  const pg = this.pg = {}
+  const defaults = util.pg.defaults
+  const config = this._config = {}
 
   // if location begins with a slash it specifies database name
   if (location[0] === '/') {
     parts.shift()
-    pg.database = parts.shift()
+    config.database = parts.shift()
   }
 
-  pg.database = pg.database || defaults.database || 'postgres'
+  config.database = config.database || defaults.database || 'postgres'
+
+  debug('pg config: %j, defaults: %j', config, defaults)
+
+  this._pool = util.createPool(config)
 
   // NB: this will eventually allow us to support subleveling natively
   // TODO: use extra path parts for schema name
   if (parts.length) throw new Error('schema paths NYI')
 
   // remaining components represent schema namespace
-  // this._schema = parts.length ? PgDOWN._escape(parts.join('__')) : ''
+  // this._schema = parts.length ? util.escapeIdentifier(parts.join('__')) : ''
 
   // set qualified name
-  this._qname = PgDOWN._escape(this._table)
+  this._qname = util.escapeIdentifier(this._table)
   // TODO: if (this._schema) qname = this._schema + '.' + this._table, escaped
 
   // TODO: surface default `public` schema in opts?
-
-  // create a unique id to isolate connection pool to this specific db instance
-  // TODO: something less shite
-  pg.poolId = pg.poolId || ('' + Math.random()).slice(2)
-
-  debug('pg options: %j, defaults: %j', pg, defaults)
-
-  this._pool = pglib.pools.getOrCreate(pg)
-
-  // this._pool.on('error', (err) => {
-  //   debug('WTF POOL ERROR', err)
-  // })
 }
 
 inherits(PgDOWN, AbstractLevelDOWN)
 
-// TODO: proper plsql ident formatting
-PgDOWN._escape = (name) => '"' + name.replace(/\"/g, '""') + '"'
+PgDOWN.prototype._serializeKey = function (key) {
+  debugv('## _serializeKey (key = %j)', key)
+  return util.serializeKey(key)
+}
 
-// TODO: binary? parseInt8?
-const PG_CONFIG_KEYS = [
-  'user',
-  'password',
-  'host',
-  'port',
-  'ssl',
-  'rows',
-  'poolSize',
-  'poolIdleTimeout',
-  'reapIntervalMillis'
-]
+PgDOWN.prototype._serializeValue = function (value) {
+  debugv('## _serializeValue (value = %j)', value)
+  return util.serializeValue(value)
+}
+
+PgDOWN.prototype._connect = function () {
+  return util.connect(this._config)
+}
+
+PgDOWN.prototype._drop = function (cb) {
+  debug('## _drop (cb = %s)', !!cb)
+
+  const command = `DROP TABLE ${this._qname}`
+  debug('_drop: command %s', command)
+  this._connect().then((client) => {
+    client.query(command, (err) => {
+      client.release(err)
+      cb(err || null)
+    })
+  }).catch((err) => {
+    debug('_drop: error: %j', err)
+    cb(err)
+  })
+}
 
 PgDOWN.prototype._open = function (options, cb) {
   debug('## _open (options = %j, cb = %s)', options, !!cb)
 
-  const pg = this.pg
+  const config = this._config
 
   // verify that database name in options matches the one we're connecting to
-  if (options.database && options.database !== pg.databasae) {
+  if (options.database && options.database !== config.databasae) {
     throw new Error('specified database does not match db location')
   }
 
   // copy over pg other options
-  PG_CONFIG_KEYS.forEach((key) => {
-    if (options[key] !== undefined) pg[key] = options[key]
+  util.CONFIG_KEYS.forEach((key) => {
+    if (options[key] !== undefined) config[key] = options[key]
   })
 
-  debug('_open: pg config: %j', pg)
+  debug('_open: pg config: %j', config)
 
   const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
   const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
   const qname = this._qname
-  var sql = ''
+  var command = ''
 
   if (errorIfExists || !createIfMissing) {
     // TODO: find a cleaner way to do this
-    sql += `
+    command += `
       SELECT COUNT(*) from ${qname} LIMIT 1;
     `
   }
 
   // create associated schema along w/ table, if specified
   if (createIfMissing && this._schema) {
-    sql += `
-      CREATE SCHEMA ${IF_NOT_EXISTS} ${PgDOWN._escape(this._schema)};
+    command += `
+      CREATE SCHEMA ${IF_NOT_EXISTS} ${util.escapeIdentifier(this._schema)};
     `
   }
 
   if (createIfMissing) {
-    // TODO: support for jsonb, bytea using _serialize[Key|Value]
+    // TODO: support for jsonb, bytea using serialize[Key|Value]
     const kType = 'bytea'
     const vType = 'bytea'
-    sql += `
+    command += `
       CREATE TABLE ${IF_NOT_EXISTS} ${qname} (
         key ${kType} PRIMARY KEY,
         value ${vType}
@@ -140,14 +132,10 @@ PgDOWN.prototype._open = function (options, cb) {
     `
   }
 
-  const pool = this._pool
-  pool.acquire((err, client) => {
-    if (err) return cb(err)
-
-    debug('_open: sql: %s', sql)
-    client.query(sql, (err, result) => {
-      debug('_open: pg client result: %j, %j', err, result)
-      err ? pool.destroy(client) : pool.release(client)
+  debug('_open: command %s', command)
+  this._connect().then((client) => {
+    client.query(command, (err) => {
+      client.release(err)
 
       if (!err && !createIfMissing && errorIfExists) {
         err = new Error('table exists: ' + qname)
@@ -155,6 +143,24 @@ PgDOWN.prototype._open = function (options, cb) {
 
       cb(err || null)
     })
+  }).catch((err) => {
+    debug('_open: error: %j', err)
+    cb(err)
+  })
+}
+
+PgDOWN.prototype._close = function (cb) {
+  debug('## _close (cb = %s)', !!cb)
+
+  // grab a handle to current pool and reset connection pool if reopened
+  const pool = this._pool
+  this._pool = util.createPool(this._config)
+
+  // TODO: timeout?
+  pool.drain(() => {
+    debug('_close: connection pool drained')
+    pool.destroyAllNow()
+    cb()
   })
 }
 
@@ -162,74 +168,64 @@ PgDOWN.prototype._get = function (key, options, cb) {
   debug('## _get (key = %j, options = %j, cb = %s)', key, options, !!cb)
 
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
-  const sql = `SELECT value FROM ${this._qname} WHERE (key)=$1`
+  const command = `SELECT value FROM ${this._qname} WHERE (key)=$1`
   const params = [ key ]
-  debug('_get: sql %s %j', sql, params)
+  debug('_get: command %s %j', command, params)
 
-  const pool = this._pool
-  pool.acquire((err, client) => {
-    if (err) return cb(err)
+  this._connect().then((client) => {
+    var result, rowErr
+    client.query(command, params)
+    .on('error', (err) => {
+      client.release(err)
 
-    client.query(sql, params, (err, result) => {
-      debug('get result: %j, %j', err, result)
-      err ? pool.destroy(client) : pool.release(client)
+      debug('_get: query error: %j', err)
+    }).on('end', () => {
+      client.release()
 
-      if (err) {
-        cb(err)
-      } else if (result.rowCount) {
-        cb(null, PgIterator._deserialize(result.rows[0].value, options.asBuffer))
+      debug('_get: query end')
+
+      if (rowErr) {
+        cb(rowErr)
+      } else if (result) {
+        cb(null, util.deserializeValue(result.value, options.asBuffer))
       } else {
-        // TODO: better error message?
-        cb(new NotFoundError('not found: ' + key))
+        cb(new util.NotFoundError('not found: ' + key))
+      }
+    }).on('row', (row) => {
+      debug('_get: row %j', row)
+      if (result) {
+        rowErr = new Error('expected unique value for key: ' + key)
+      } else {
+        result = row
       }
     })
+  }).catch((err) => {
+    debug('_get: error: %j', err)
+    cb(err)
   })
 }
 
 PgDOWN.prototype._put = function (key, value, options, cb) {
   debug('## _put (key = %j, value = %j, options = %j, cb = %s)', key, value, options, !!cb)
-
-  const pool = this._pool
-  pool.acquire((err, client) => {
-    if (err) return cb(err)
-
-    const op = { type: 'put', key: key, value: value }
-    PgBatch._commands.put(client, this._qname, op, (err) => {
-      err ? pool.destroy(client) : pool.release(client)
-      cb(err || null)
-    })
-  })
+  this._batch([{ type: 'put', key: key, value: value, options: options }], {}, cb)
 }
 
 PgDOWN.prototype._del = function (key, options, cb) {
   debug('## _del (key = %j, options = %j, cb = %s)', key, options, !!cb)
-
-  const pool = this._pool
-  pool.acquire((err, client) => {
-    if (err) return cb(err)
-
-    const op = { type: 'del', key: key }
-    PgBatch._commands.del(client, this._qname, op, (err) => {
-      err ? pool.destroy(client) : pool.release(client)
-      cb(err || null)
-    })
-  })
+  this._batch([{ type: 'del', key: key, options: options }], {}, cb)
 }
 
 PgDOWN.prototype._batch = function (ops, options, cb) {
   var batch = this._chainedBatch()
 
   ops.forEach((op) => {
-    try {
-      if (op.type === 'del') {
-        batch._del(op.key, options)
-      } else if (op.type === 'put') {
-        batch._put(op.key, op.value, options)
-      } else {
-        debug('_batch: unknown operation: %j', op)
-      }
-    } catch (err) {
-      process.nextTick(() => cb(err))
+    // TODO: merge op.options with batch options?
+    if (op.type === 'del') {
+      batch._del(op.key, op.options)
+    } else if (op.type === 'put') {
+      batch._put(op.key, op.value, op.options)
+    } else {
+      debug('_batch: unknown operation: %j', op)
     }
   })
 
@@ -238,36 +234,12 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
 
 PgDOWN.prototype._chainedBatch = function () {
   debug('## _chainedBatch ()')
-  return new PgBatch(this)
+  return new PgChainedBatch(this)
 }
 
 PgDOWN.prototype._iterator = function (options) {
   debug('## _iterator (options = %j)', options)
   return new PgIterator(this, options)
-}
-
-PgDOWN.prototype._close = function (cb) {
-  debug('## _close (cb = %s)', !!cb)
-
-  const pool = this._pool
-  // debug('_close: draining client pool: %j', pool)
-  // pool.drain(() => { ...
-  debug('_close: destroying pool resources')
-  pool.destroyAllNow(cb)
-}
-
-PgDOWN.prototype._drop = function (cb) {
-  debug('## _drop (cb = %s)', !!cb)
-
-  const pool = this._pool
-  pool.acquire((err, client) => {
-    if (err) return cb(err)
-
-    client.query(`DROP TABLE ${this._qname}`, (err) => {
-      err ? pool.destroy(client) : pool.release(client)
-      cb && cb(err || null)
-    })
-  })
 }
 
 module.exports = PgDOWN

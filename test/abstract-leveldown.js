@@ -19,9 +19,12 @@ require('abstract-leveldown/abstract/get-test').all(pgdown, test, util)
 
 require('abstract-leveldown/abstract/put-get-del-test').all(pgdown, test, util, buffer)
 
-// require('abstract-leveldown/abstract/iterator-test').all(pgdown, test, util)
+// TODO: snapshot isolation
+const iterators = require('abstract-leveldown/abstract/iterator-test')
+iterators.snapshot = function () {}
+iterators.all(pgdown, test, util)
 
-// require('abstract-leveldown/abstract/ranges-test').all(pgdown, test, util)
+require('abstract-leveldown/abstract/ranges-test').all(pgdown, test, util)
 
 require('abstract-leveldown/abstract/batch-test').all(pgdown, test, util)
 // require('abstract-leveldown/abstract/chained-batch-test').all(pgdown, test, util)

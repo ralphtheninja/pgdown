@@ -20,7 +20,8 @@
     "debug": "^2.2.0",
     "inherits": "^2.0.1",
     "level-errors": "^1.0.4",
-    "pg": "^4.4.6",
+    "monotonic-timestamp": "0.0.9",
+    "pg": "^4.5.1",
     "pg-cursor": "^1.0.0"
   },
   "devDependencies": {

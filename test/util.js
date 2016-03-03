@@ -1,20 +1,30 @@
-const pglib = require('pg')
+'use strict'
+
+const pg = require('pg')
 const PgDOWN = require('../')
 
 const util = exports
 
 util._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
-pglib.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
+pg.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
 
-util._count = 0
+var _count = 0
+var _last
 
-util.location = (loc) => {
-  return (util._last = loc || (util._prefix + (++util._count)))
+util.lastLocation = () => _last
+
+util.location = (loc) => (_last = loc || (util._prefix + (++_count)))
+
+util.cleanup = (cb) => {
+  pg.end()
+  cb()
 }
 
 util.setUp = (t) => {
-  pglib.end()
-  t.end()
+  util.cleanup((err) => {
+    t.error(err, 'cleanup returned an error')
+    t.end()
+  })
 }
 
 util.tearDown = (t) => {
@@ -23,19 +33,16 @@ util.tearDown = (t) => {
 
 util.collectEntries = function (iterator, cb) {
   const data = []
-  const next = () => {
-    iterator.next((err, key, value) => {
+  function next () {
+    iterator.next(function (err, key, value) {
       if (err) return cb(err)
-
       if (!arguments.length) {
-        return process.nextTick(() => {
-          iterator.end((err) => cb(err, data))
+        return iterator.end(function (err) {
+          cb(err, data)
         })
       }
-
       data.push({ key: key, value: value })
-
-      process.nextTick(next)
+      setTimeout(next, 0)
     })
   }
   next()
@@ -48,10 +55,7 @@ const _PgDOWN_open = PgDOWN.prototype._open
 PgDOWN.prototype._open = function (options, cb) {
   const table = this._table
 
-  // use a lower default pool idle timeout
-  options.poolIdleTimeout = options.poolIdleTimeout || 2000
-
-  if (table !== util._last || dropped[table]) {
+  if (table !== _last || dropped[table]) {
     return _PgDOWN_open.call(this, options, cb)
   }
 

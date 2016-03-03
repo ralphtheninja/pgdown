@@ -1,12 +1,14 @@
+'use strict'
+
 const test = require('tape')
 const util = require('./util')
-const pglib = require('pg')
+const pg = require('pg')
 const PgDOWN = require('../')
 
 test('constructor', (t) => {
   t.test('defaults', (t) => {
     const db = PgDOWN(util.location())
-    t.equal(db.pg.database, pglib.defaults.database, 'default database set')
+    t.equal(db._config.database, pg.defaults.database, 'default database set')
     t.equal(db._table.indexOf(util._prefix), 0, 'table name uses test prefix')
     t.ok(db._qname.indexOf(db._table) >= 0, 'qname includes table name')
     t.equal(db._schema, undefined, 'no schema')
@@ -25,7 +27,7 @@ test('open', (t) => {
     const database = 'pg_invalid_db__'
     const loc = util.location('/' + database + '/' + util._prefix)
     const db = PgDOWN(loc)
-    t.equal(db.pg.database, database, 'db name set')
+    t.equal(db._config.database, database, 'db name set')
     t.equal(db.location.indexOf(loc), 0, 'location set')
 
     db.open((err) => {
