@@ -48,3 +48,4 @@ PgChainedBatch.prototype._del = function (key) {
 }
 
 require('abstract-leveldown/abstract/chained-batch-test').args(PgDOWN, test, common)
+require('abstract-leveldown/abstract/chained-batch-test').batch(PgDOWN, test, common)
