@@ -38,9 +38,10 @@ function PgIterator (db, options) {
   const command = this._clauses.join(' ')
   debug('# PgIterator command %s %j', command, params)
 
-  this._cursorCommand = new Cursor(command, params)
-
-  this._client = util.connect(db)
+  this._client = util.connect(db).then((client) => {
+    this._cursor = client.query(new Cursor(command, params))
+    return client
+  })
 
   // ensure cleanup for initialization errors
   this._client.catch((err) => {
@@ -102,11 +103,6 @@ PgIterator.prototype._next = function (cb) {
   this._client.then((client) => {
     const nextRow = this._rows && this._rows.shift()
     if (nextRow) return this._write(nextRow, cb)
-
-    // create query from compiled cursor if not already available
-    if (!this._cursor) {
-      this._cursor = client.query(this._cursorCommand)
-    }
 
     this._cursor.read(this._windowSize, (err, rows) => {
       if (err) return cb(err)
