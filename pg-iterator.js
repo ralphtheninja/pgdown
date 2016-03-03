@@ -61,7 +61,7 @@ PgIterator._comparators = {
   gte: () => '>=',
   max: () => '>=',
   start: (range) => range.reverse ? '<=' : '>=',
-  end: (range) => range.reverse ? '>=' : '<=',
+  end: (range) => range.reverse ? '>=' : '<='
 }
 
 PgIterator.prototype._processRange = function (range) {
@@ -88,7 +88,6 @@ PgIterator.prototype._processRange = function (range) {
 
 PgIterator.prototype._windowSize = 100
 
-
 PgIterator.prototype._write = function (row, cb) {
   const key = util.deserializeKey(row.key, this._keyAsBuffer)
   const value = util.deserializeValue(row.value, this._valueAsBuffer)
@@ -99,7 +98,7 @@ PgIterator.prototype._write = function (row, cb) {
 
 PgIterator.prototype._next = function (cb) {
   debugv('# PgIterator _next (cb)')
-  
+
   this._client.then((client) => {
     const nextRow = this._rows && this._rows.shift()
     if (nextRow) return this._write(nextRow, cb)
