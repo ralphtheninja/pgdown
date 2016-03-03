@@ -35,8 +35,6 @@ function PgDOWN (location) {
 
   debug('pg config: %j, defaults: %j', config, defaults)
 
-  this._pool = util.createPool(config)
-
   // NB: this will eventually allow us to support subleveling natively
   // TODO: use extra path parts for schema name
   if (parts.length) throw new Error('schema paths NYI')
@@ -63,28 +61,8 @@ PgDOWN.prototype._serializeValue = function (value) {
   return util.serializeValue(value)
 }
 
-PgDOWN.prototype._connect = function () {
-  return util.connect(this._config)
-}
-
-PgDOWN.prototype._drop = function (cb) {
-  debug('## _drop (cb = %s)', !!cb)
-
-  const command = `DROP TABLE ${this._qname}`
-  debug('_drop: command %s', command)
-  this._connect().then((client) => {
-    client.query(command, (err) => {
-      client.release(err)
-      cb(err || null)
-    })
-  }).catch((err) => {
-    debug('_drop: error: %j', err)
-    cb(err)
-  })
-}
-
 PgDOWN.prototype._open = function (options, cb) {
-  debug('## _open (options = %j, cb = %s)', options, !!cb)
+  debug('## _open (options = %j, cb)', options)
 
   const config = this._config
 
@@ -99,6 +77,8 @@ PgDOWN.prototype._open = function (options, cb) {
   })
 
   debug('_open: pg config: %j', config)
+
+  util.createPool(this)
 
   const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
@@ -133,7 +113,7 @@ PgDOWN.prototype._open = function (options, cb) {
   }
 
   debug('_open: command %s', command)
-  this._connect().then((client) => {
+  util.connect(this).then((client) => {
     client.query(command, (err) => {
       client.release(err)
 
@@ -150,29 +130,20 @@ PgDOWN.prototype._open = function (options, cb) {
 }
 
 PgDOWN.prototype._close = function (cb) {
-  debug('## _close (cb = %s)', !!cb)
+  debug('## _close (cb)')
 
-  // grab a handle to current pool and reset connection pool if reopened
-  const pool = this._pool
-  this._pool = util.createPool(this._config)
-
-  // TODO: timeout?
-  pool.drain(() => {
-    debug('_close: connection pool drained')
-    pool.destroyAllNow()
-    cb()
-  })
+  util.destroyPool(this, cb)
 }
 
 PgDOWN.prototype._get = function (key, options, cb) {
-  debug('## _get (key = %j, options = %j, cb = %s)', key, options, !!cb)
+  debug('## _get (key = %j, options = %j, cb)', key, options)
 
   // TODO: most efficient way to disable jsonb field parsing in pg lib?
   const command = `SELECT value FROM ${this._qname} WHERE (key)=$1`
   const params = [ key ]
   debug('_get: command %s %j', command, params)
 
-  this._connect().then((client) => {
+  util.connect(this).then((client) => {
     var result, rowErr
     client.query(command, params)
     .on('error', (err) => {
@@ -206,12 +177,12 @@ PgDOWN.prototype._get = function (key, options, cb) {
 }
 
 PgDOWN.prototype._put = function (key, value, options, cb) {
-  debug('## _put (key = %j, value = %j, options = %j, cb = %s)', key, value, options, !!cb)
+  debug('## _put (key = %j, value = %j, options = %j, cb)', key, value, options)
   this._batch([{ type: 'put', key: key, value: value, options: options }], {}, cb)
 }
 
 PgDOWN.prototype._del = function (key, options, cb) {
-  debug('## _del (key = %j, options = %j, cb = %s)', key, options, !!cb)
+  debug('## _del (key = %j, options = %j, cb)', key, options)
   this._batch([{ type: 'del', key: key, options: options }], {}, cb)
 }
 
@@ -241,5 +212,15 @@ PgDOWN.prototype._iterator = function (options) {
   debug('## _iterator (options = %j)', options)
   return new PgIterator(this, options)
 }
+
+// PgDOWN.prototype.approximateSize = function () {
+//   const command = `
+//     SELECT nspname || '.' || relname AS "name", pg_relation_size(C.oid) AS "size"
+//     FROM pg_class C
+//     LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
+//     WHERE nspname = 'public' AND relname = 'pgdown_test_10_pkey'
+//     ORDER BY pg_relation_size(C.oid) DESC;
+//   `
+// }
 
 module.exports = PgDOWN

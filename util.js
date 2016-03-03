@@ -26,9 +26,28 @@ util.serializeValue = serialize
 
 util.NotFoundError = errors.NotFoundError
 
-util.connect = function (config) {
+util.pg = pg
+
+util.createPool = function (db) {
+  // create a unique id to keep from pissing in the connection pool on close
+  db._config._poolId = mts()
+  return (db._pool = pg.pools.getOrCreate(db._config))
+}
+
+util.destroyPool = function (db, cb) {
+  // grab a handle to current pool
+  const pool = db._pool
+
+  // TODO: add timeout for when drain hangs?
+  pool.drain(() => {
+    pool.destroyAllNow()
+    cb()
+  })
+}
+
+util.connect = function (db) {
   return new Promise((resolve, reject) => {
-    pg.connect(config, (err, client, done) => {
+    pg.connect(db._config, (err, client, done) => {
       if (err) {
         reject(err)
       } else {
@@ -42,12 +61,14 @@ util.connect = function (config) {
   })
 }
 
-util.pg = pg
-
-util.createPool = function (config) {
-  // create a unique id to keep from pissing in the connection pool on close
-  config._poolId = mts()
-  return pg.pools.getOrCreate(config)
+util.drop = function (db, cb) {
+  util.connect(db).then((client) => {
+    client.query(`DROP TABLE ${db._qname}`, (err) => {
+      client.release(err)
+      cb(err || null)
+    })
+  })
+  .catch((err) => cb(err))
 }
 
 // TODO: binary? parseInt8?

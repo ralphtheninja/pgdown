@@ -2,7 +2,7 @@ const after = require('after')
 const levelup = require('levelup')
 const test = require('tape')
 const PgDOWN = require('../')
-const util = require('./util')
+const common = require('./_common')
 
 function pgupJSON (location, options) {
   if (typeof location !== 'string') {
@@ -19,7 +19,7 @@ function pgupJSON (location, options) {
 }
 
 test('crud', (t) => {
-  const db = pgupJSON(util.location())
+  const db = pgupJSON(common.location())
 
   t.test('initialize', (t) => {
     db.open((err) => {

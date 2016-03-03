@@ -40,7 +40,7 @@ function PgIterator (db, options) {
 
   this._cursorCommand = new Cursor(command, params)
 
-  this._client = db._connect()
+  this._client = util.connect(db)
 
   // ensure cleanup for initialization errors
   this._client.catch((err) => {

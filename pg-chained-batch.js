@@ -2,6 +2,7 @@
 
 const inherits = require('inherits')
 const AbstractChainedBatch = require('abstract-leveldown/abstract-chained-batch')
+const util = require('./util')
 const debug = require('debug')('pgdown')
 const debugv = require('debug')('pgdown:verbose')
 
@@ -12,7 +13,7 @@ function PgChainedBatch (db) {
 
   this._qname = db._qname
 
-  this._client = db._connect().then((client) => {
+  this._client = util.connect(db).then((client) => {
     client.query('BEGIN')
     return client
   })
@@ -65,13 +66,14 @@ PgChainedBatch.prototype._clear = function () {
 }
 
 PgChainedBatch.prototype._cleanup = function (err, cb) {
-  const result = this._client.then((client) => {
-    // NB: for now, always destroy client
-    client.release(true) // client.release(err)
-    if (cb) cb(err || null)
+  const error = this._error || err
+  this._client.then((client) => {
+    client.release(error)
+    if (cb) cb(error || null)
   })
-
-  if (cb) result.catch(cb)
+  .catch(cb || ((err) => {
+    if (!this._error) this._error = err
+  }))
 }
 
 PgChainedBatch._commands = {}

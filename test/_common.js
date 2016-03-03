@@ -1,37 +1,37 @@
 'use strict'
 
-const pg = require('pg')
+const util = require('../util')
 const PgDOWN = require('../')
 
-const util = exports
+const common = exports
 
-util._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
-pg.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
+common._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
+util.pg.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
 
 var _count = 0
 var _last
 
-util.lastLocation = () => _last
+common.lastLocation = () => _last
 
-util.location = (loc) => (_last = loc || (util._prefix + (++_count)))
+common.location = (loc) => (_last = loc || (common._prefix + (++_count)))
 
-util.cleanup = (cb) => {
-  pg.end()
+common.cleanup = (cb) => {
+  util.pg.end()
   cb()
 }
 
-util.setUp = (t) => {
-  util.cleanup((err) => {
+common.setUp = (t) => {
+  common.cleanup((err) => {
     t.error(err, 'cleanup returned an error')
     t.end()
   })
 }
 
-util.tearDown = (t) => {
-  util.setUp(t)
+common.tearDown = (t) => {
+  common.setUp(t)
 }
 
-util.collectEntries = function (iterator, cb) {
+common.collectEntries = function (iterator, cb) {
   const data = []
   function next () {
     iterator.next(function (err, key, value) {
@@ -59,7 +59,7 @@ PgDOWN.prototype._open = function (options, cb) {
     return _PgDOWN_open.call(this, options, cb)
   }
 
-  this._drop((err) => {
+  util.drop(this, (err) => {
     if (err && err.routine !== 'DropErrorMsgNonExistent') return cb(err)
 
     dropped[table] = true
