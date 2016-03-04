@@ -77,13 +77,13 @@ PgDOWN.prototype._open = function (options, cb) {
   debug('_open: command: %s', command)
   util.connect(this).then((client) => {
     client.query(command, (err) => {
-      client.release(err)
 
       if (!err && !createIfMissing && errorIfExists) {
         err = new Error('table exists: ' + qname)
       }
 
       cb(err || null)
+      client.release(err)
     })
   }).catch((err) => {
     debug('_open: error: %j', err)
@@ -109,11 +109,10 @@ PgDOWN.prototype._get = function (key, options, cb) {
     var result, rowErr
     client.query(command, params)
     .on('error', (err) => {
+      debug('_get: query error: %j', err)
       client.release(err)
 
-      debug('_get: query error: %j', err)
     }).on('end', () => {
-      client.release()
 
       debug('_get: query end')
 
@@ -124,6 +123,8 @@ PgDOWN.prototype._get = function (key, options, cb) {
       } else {
         cb(new util.NotFoundError('not found: ' + key))
       }
+
+      client.release()
     }).on('row', (row) => {
       debug('_get: row %j', row)
       if (result) {

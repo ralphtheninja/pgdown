@@ -126,9 +126,9 @@ PgIterator.prototype._cleanup = function (err, cb) {
 
     if (this._cursor) {
       this._cursor.close(() => {
-        debug_v('_iterator: cursor ended')
+        debug_v('_iterator: cursor closed')
+        this._cursor = null
       })
-      this._cursor = null
     }
 
     if (cb) cb(err || null)

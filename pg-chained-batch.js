@@ -14,7 +14,7 @@ function PgChainedBatch (db) {
   this._qname = db._qname
 
   this._client = util.connect(db).then((client) => {
-    client.query('BEGIN')
+    client.query('BEGIN', [])
     return client
   })
 
@@ -31,7 +31,7 @@ PgChainedBatch.prototype._write = function (cb) {
   debug('# PgChainedBatch _write (cb)')
   this._cb = cb
   this._client.then((client) => {
-    client.query('COMMIT', (err) => this._cleanup(err, cb))
+    client.query('COMMIT', [], (err) => this._cleanup(err, cb))
   })
   .catch((err) => this._cleanup(err, cb))
 }
@@ -60,8 +60,8 @@ PgChainedBatch.prototype._clear = function () {
   debug('# PgChainedBatch _clear ()')
   this._client.then((client) => {
     // abort existing transaction and start a fresh one
-    client.query('ROLLBACK')
-    client.query('BEGIN')
+    client.query('ROLLBACK', [])
+    client.query('BEGIN', [])
   })
   .catch((err) => this._cleanup(err))
 }

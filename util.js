@@ -55,6 +55,13 @@ util.connect = function (db) {
     pg.connect(db._config, (err, client, done) => {
       if (err) return reject(err)
 
+      // // override client query method
+      // var _query = client.query
+      // client.query = function (command, params) {
+      //   console.warn('SQL:', command, params)
+      //   return _query.apply(this, arguments)
+      // }
+
       // add query pool helper
       client.release = (err) => {
         client.release = () => {}
