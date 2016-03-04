@@ -48,18 +48,6 @@ test('open', (t) => {
     })
   })
 
-  // NB: pg_ prefixed tables are probably fine now
-  t.skip('invalid table name', (t) => {
-    const table = common.location('pg_invalid_table__')
-    const db = PgDOWN(table)
-    t.equal(db._config._table, table, 'table name in config')
-
-    db.open((err) => {
-      t.ok(err, 'error on open')
-      t.end()
-    })
-  })
-
   t.test('no create if missing', (t) => {
     const loc = common.location()
     const opts = { createIfMissing: false }

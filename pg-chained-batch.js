@@ -13,30 +13,24 @@ function PgChainedBatch (db) {
 
   this._qname = db._qname
 
-  this._client = util.connect(db).then((client) => {
-    client._exec('BEGIN', [])
-    return client
-  })
-
-  // ensure cleanup for initialization errors
-  this._client.catch((err) => {
-    debug('_chainedBatch initialization error: %j', err)
-    this._cleanup(err)
-  })
+  this._client = this._begin()
 }
 
 inherits(PgChainedBatch, AbstractChainedBatch)
 
-PgChainedBatch.prototype._write = function (cb) {
-  debug('# PgChainedBatch _write (cb)')
-  this._cb = cb
-  this._client.then((client) => {
-    // client.on('drain', (arg) => console.warn('COMMIT DRAIN', arg))
-    client._exec('COMMIT', [])
-    .on('error', () => (err) => this._cleanup(err, cb))
-    .on('end', () => this._cleanup(null, cb))
+PgChainedBatch.prototype._begin = function () {
+  const client = util.connect(this._db).then((client) => {
+    client._exec('BEGIN')
+    return client
   })
-  .catch((err) => this._cleanup(err, cb))
+
+  // ensure cleanup for initialization errors
+  client.catch((err) => {
+    debug('_chainedBatch initialization error: %j', err)
+    if (this._client === client) this._cleanup(err)
+  })
+
+  return client
 }
 
 PgChainedBatch.prototype._put = function (key, value) {
@@ -63,10 +57,24 @@ PgChainedBatch.prototype._clear = function () {
   debug('# PgChainedBatch _clear ()')
   this._client.then((client) => {
     // abort existing transaction and start a fresh one
-    client._exec('ROLLBACK', [])
-    client._exec('BEGIN', [])
+    client._exec('ROLLBACK; BEGIN')
+    .on('error', (err) => console.warn('WTF', err))
+    .on('drain', () => console.warn('drain'))
+    .on('end', () => console.warn('end'))
   })
   .catch((err) => this._cleanup(err))
+}
+
+PgChainedBatch.prototype._write = function (cb) {
+  debug('# PgChainedBatch _write (cb)')
+  this._cb = cb
+  this._client.then((client) => {
+    // client.on('drain', (arg) => console.warn('COMMIT DRAIN', arg))
+    client._exec('COMMIT', [])
+    .on('error', () => (err) => this._cleanup(err, cb))
+    .on('end', () => this._cleanup(null, cb))
+  })
+  .catch((err) => this._cleanup(err, cb))
 }
 
 PgChainedBatch.prototype._cleanup = function (err, cb) {

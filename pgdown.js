@@ -64,11 +64,11 @@ PgDOWN.prototype._open = function (options, cb) {
   const errorIfExists = options.errorIfExists
   const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
   const qname = this._qname
-  var command = ''
+  var text = ''
 
   if (errorIfExists || !createIfMissing) {
     // TODO: find a cleaner way to do this (e.g. pg_class, pg_namespace tables)
-    command += `
+    text += `
       SELECT COUNT(*) from ${qname} LIMIT 1;
     `
   }
@@ -76,7 +76,7 @@ PgDOWN.prototype._open = function (options, cb) {
   // create associated schema along w/ table, if specified
   // const schema = util.escapeIdentifier(this._config._schema)
   // if (createIfMissing && schema) {
-  //   command += `
+  //   text += `
   //     CREATE SCHEMA ${IF_NOT_EXISTS} ${util.escapeIdentifier(this._schema)};
   //   `
   // }
@@ -85,7 +85,7 @@ PgDOWN.prototype._open = function (options, cb) {
     // TODO: support for jsonb, bytea using serialize[Key|Value]
     const kType = 'bytea'
     const vType = 'bytea'
-    command += `
+    text += `
       CREATE TABLE ${IF_NOT_EXISTS} ${qname} (
         key ${kType} PRIMARY KEY,
         value ${vType}
@@ -93,19 +93,14 @@ PgDOWN.prototype._open = function (options, cb) {
     `
   }
 
-  debug('_open: command: %s', command)
   util.connect(this).then((client) => {
-    client._exec(command, [])
-    .on('error', (err) => {
-      debug('_open: query error: %j', err)
+    client._exec(text, [], (err, rows) => {
+      debug('_open: query result %j %j', err, rows)
       client.release(err)
-      cb(err)
-    })
-    .on('end', () => {
-      debug('_open: query end')
-      client.release()
 
-      if (!createIfMissing && errorIfExists) {
+      if (err) {
+        cb(err)
+      } else if (errorIfExists && !createIfMissing) {
         cb(new Error('table exists: ' + qname))
       } else {
         cb()
@@ -130,7 +125,7 @@ PgDOWN.prototype._close = function (cb) {
   })
 }
 
-PgDOWN.prototype._buildStatement = function (method, values) {
+PgDOWN.prototype._prepareStatement = function (method, values) {
   const text = this._statements[method]
   if (!text) throw new Error('no statement for method: ' + method)
 
@@ -144,34 +139,22 @@ PgDOWN.prototype._buildStatement = function (method, values) {
 PgDOWN.prototype._get = function (key, options, cb) {
   debug('## _get (key = %j, options = %j, cb)', key, options)
 
-  const statement = this._buildStatement('_get', [ key ])
+  const statement = this._prepareStatement('_get', [ key ])
 
   util.connect(this).then((client) => {
-    var result, rowErr
-    client._exec(statement)
-    .on('error', (err) => {
-      debug('_get: query error: %j', err)
+    // TODO: actually send statement properly
+    client._exec(statement.text, statement.values, (err, rows) => {
+      debug('_get: query result %j %j', err, rows)
       client.release(err)
-      cb(err)
-    })
-    .on('end', () => {
-      debug('_get: query end')
-      client.release()
 
-      if (rowErr) {
-        cb(rowErr)
-      } else if (result) {
-        cb(null, this._deserializeValue(result.value, options.asBuffer))
-      } else {
+      if (err) {
+        cb(err)
+      } else if (!rows || rows.length > 1) {
+        cb(new Error('unexpected result for key: ' + key))
+      } else if (!rows.length) {
         cb(new util.NotFoundError('not found: ' + key))
-      }
-    })
-    .on('row', (row) => {
-      debug('_get: row %j', row)
-      if (result) {
-        rowErr = new Error('expected unique value for key: ' + key)
       } else {
-        result = row
+        cb(null, this._deserializeValue(rows[0].value, options.asBuffer))
       }
     })
   })
@@ -231,7 +214,7 @@ PgDOWN.prototype._approximateSize = function (start, end, cb) {
 
   util.connect(this).then((client) => {
     client._exec(text, values, (err, rows) => {
-      debug('_approximateSize: query %j %j', err, rows)
+      debug('_approximateSize: query result %j %j', err, rows)
       client.release(err)
       const size = Number(rows[0] && rows[0].size)
       if (isNaN(size)) {
