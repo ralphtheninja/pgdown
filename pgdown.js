@@ -41,10 +41,6 @@ PgDOWN.prototype._open = function (options, cb) {
 
   this._pool = util.createPool(this._config)
 
-  // this._pool.on('error', (err) => {
-  //   debug('pool error: %j', err)
-  // })
-
   const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
   const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
@@ -80,16 +76,24 @@ PgDOWN.prototype._open = function (options, cb) {
 
   debug('_open: command: %s', command)
   util.connect(this).then((client) => {
-    client.query(command, [], (err) => {
+    client.query(command, [])
+    .on('error', (err) => {
+      debug('_open: query error: %j', err)
       client.release(err)
-
-      if (!err && !createIfMissing && errorIfExists) {
-        err = new Error('table exists: ' + qname)
-      }
-
-      cb(err || null)
+      cb(err)
     })
-  }).catch((err) => {
+    .on('end', () => {
+      debug('_open: query end')
+      client.release()
+
+      if (!createIfMissing && errorIfExists) {
+        cb(new Error('table exists: ' + qname))
+      } else {
+        cb()
+      }
+    })
+  })
+  .catch((err) => {
     debug('_open: error: %j', err)
     cb(err)
   })
@@ -119,11 +123,13 @@ PgDOWN.prototype._get = function (key, options, cb) {
     var result, rowErr
     client.query(command, params)
     .on('error', (err) => {
-      client.release()
       debug('_get: query error: %j', err)
-    }).on('end', () => {
-      client.release()
+      client.release(err)
+      cb(err)
+    })
+    .on('end', () => {
       debug('_get: query end')
+      client.release()
 
       if (rowErr) {
         cb(rowErr)
@@ -132,7 +138,8 @@ PgDOWN.prototype._get = function (key, options, cb) {
       } else {
         cb(new util.NotFoundError('not found: ' + key))
       }
-    }).on('row', (row) => {
+    })
+    .on('row', (row) => {
       debug('_get: row %j', row)
       if (result) {
         rowErr = new Error('expected unique value for key: ' + key)
@@ -140,7 +147,8 @@ PgDOWN.prototype._get = function (key, options, cb) {
         result = row
       }
     })
-  }).catch((err) => {
+  })
+  .catch((err) => {
     debug('_get: error: %j', err)
     cb(err)
   })
