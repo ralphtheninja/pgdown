@@ -4,7 +4,7 @@
   "description": "PostgreSQL backed abstract-leveldown",
   "main": "pgdown.js",
   "scripts": {
-    "test": "DEBUG=pgdown tape test && npm run lint",
+    "test": "DEBUG=pgdown PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test && npm run lint",
     "lint": "standard"
   },
   "keywords": [],
