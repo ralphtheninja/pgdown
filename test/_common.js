@@ -3,17 +3,19 @@
 const util = require('../util')
 const PgDOWN = require('../')
 
+util.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
+util.PG_DEFAULTS.poolIdleTimeout = 2000
+
 const common = exports
 
-common._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
-util.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
+common.PREFIX = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
 
 var _count = 0
 var _last
 
 common.lastLocation = () => _last
 
-common.location = (loc) => (_last = loc || (common._prefix + (++_count)))
+common.location = (loc) => (_last = loc || (common.PREFIX + (++_count)))
 
 common.cleanup = (cb) => {
   util.destroyAll(cb)
@@ -58,7 +60,8 @@ PgDOWN.prototype._open = function (options, cb) {
     return _PgDOWN_open.call(this, options, cb)
   }
 
-  util.drop(this, (err) => {
+  util.dropTable(this, (err) => {
+    // TODO: err.code == '42P01'
     if (err && err.routine !== 'DropErrorMsgNonExistent') return cb(err)
 
     DROPPED[location] = true

@@ -31,7 +31,10 @@ PgChainedBatch.prototype._write = function (cb) {
   debug('# PgChainedBatch _write (cb)')
   this._cb = cb
   this._client.then((client) => {
-    client.query('COMMIT', [], (err) => this._cleanup(err, cb))
+    // client.on('drain', (arg) => console.warn('COMMIT DRAIN', arg))
+    client.query('COMMIT', [])
+    .on('error', () => (err) => this._cleanup(err, cb))
+    .on('end', () => this._cleanup(null, cb))
   })
   .catch((err) => this._cleanup(err, cb))
 }
@@ -83,7 +86,7 @@ PgChainedBatch._commands = {}
 PgChainedBatch._commands.put = function (client, qname, op, cb) {
   const INSERT = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
   const UPSERT = INSERT + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  // const UPDATE = `UPDATE ${qname} SET value=($2) WHERE key=($1)'`
+  // const UPDATE = `UPDATE ${qname} SET value=($2) WHERE key=($1)`
 
   // always an upsert for now
   const command = UPSERT

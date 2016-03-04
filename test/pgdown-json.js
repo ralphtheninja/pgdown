@@ -26,7 +26,7 @@ test('crud', (t) => {
     db.open((err) => {
       if (err) return t.end(err)
 
-      util.drop(db.db, (err) => {
+      util.dropTable(db.db, (err) => {
         if (err) return t.end(err)
         db.close(t.end)
       })
@@ -115,6 +115,24 @@ test('crud', (t) => {
       data.forEach((d) => { d.type = 'put' })
       t.deepEqual(data, sorted, 'all records in order')
       t.end()
+    })
+  })
+
+  t.test('approximate size', (t) => {
+    db.db.approximateSize('a', 'ac', (err, size1) => {
+      if (err) return t.end(err)
+
+      t.ok(size1 > 0, 'positive')
+      t.equal(parseInt(size1), size1, 'integer')
+
+      db.db.approximateSize('a', 'ab', (err, size2) => {
+        if (err) return t.end(err)
+
+        t.ok(size2 > 0, 'positive')
+        t.equal(parseInt(size2), size2, 'integer')
+        t.ok(size1 > size2)
+        t.end()
+      })
     })
   })
 

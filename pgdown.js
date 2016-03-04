@@ -16,24 +16,43 @@ function PgDOWN (location) {
   AbstractLevelDOWN.call(this, location)
   debug('# new PgDOWN (location = %j)', location)
 
-  this._config = util.config(location)
+  this._config = util.parseConfig(location)
   debug('pg config: %j', this._config)
 
   // set qualified name
-  this._qname = util.escapeIdentifier(this._config._table)
+  const qname = this._qname = util.escapeIdentifier(this._config._table)
   // TODO: if (schema) qname = schema + '.' + table, escaped
+
+  // TODO: move all this to a lib
+  const SQL = this._statements = {}
+
+  SQL.__insert = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
+  SQL.__update = `UPDATE ${qname} SET value=($2) WHERE key=($1)`
+
+  SQL._get = `SELECT value FROM ${qname} WHERE (key)=$1`
+  SQL._put = SQL.__insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
 }
 
 inherits(PgDOWN, AbstractLevelDOWN)
 
 PgDOWN.prototype._serializeKey = function (key) {
   debug_v('## _serializeKey (key = %j)', key)
-  return util.serializeKey(key)
+  return util.serialize(key)
 }
 
 PgDOWN.prototype._serializeValue = function (value) {
   debug_v('## _serializeValue (value = %j)', value)
-  return util.serializeValue(value)
+  return util.serialize(value)
+}
+
+PgDOWN.prototype._deserializeKey = function (key, asBuffer) {
+  debug_v('## _deserializeKey (key = %j, asBuffer = %j)', key)
+  return util.deserialize(key, asBuffer)
+}
+
+PgDOWN.prototype._deserializeValue = function (value, asBuffer) {
+  debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
+  return util.deserialize(value, asBuffer)
 }
 
 PgDOWN.prototype._open = function (options, cb) {
@@ -111,17 +130,25 @@ PgDOWN.prototype._close = function (cb) {
   })
 }
 
+PgDOWN.prototype._buildStatement = function (method, values) {
+  const text = this._statements[method]
+  if (!text) throw new Error('no statement for method: ' + method)
+
+  const statement = {}
+  statement.name = 'pgdown##' + method
+  statement.text = text
+  statement.values = values
+  return statement
+}
+
 PgDOWN.prototype._get = function (key, options, cb) {
   debug('## _get (key = %j, options = %j, cb)', key, options)
 
-  // TODO: most efficient way to disable jsonb field parsing in pg lib?
-  const command = `SELECT value FROM ${this._qname} WHERE (key)=$1`
-  const params = [ key ]
-  debug('_get: command %s %j', command, params)
+  const statement = this._buildStatement('_get', [ key ])
 
   util.connect(this).then((client) => {
     var result, rowErr
-    client.query(command, params)
+    client.query(statement)
     .on('error', (err) => {
       debug('_get: query error: %j', err)
       client.release(err)
@@ -134,7 +161,7 @@ PgDOWN.prototype._get = function (key, options, cb) {
       if (rowErr) {
         cb(rowErr)
       } else if (result) {
-        cb(null, util.deserializeValue(result.value, options.asBuffer))
+        cb(null, this._deserializeValue(result.value, options.asBuffer))
       } else {
         cb(new util.NotFoundError('not found: ' + key))
       }
@@ -191,10 +218,39 @@ PgDOWN.prototype._iterator = function (options) {
   return new PgIterator(this, options)
 }
 
-PgDOWN.prototype.approximateSize = function () {
-  throw new Error('NYI')
+PgDOWN.prototype._approximateSize = function (start, end, cb) {
+  const options = { start: start, end: end }
+  // generate standard iterator sql and replace head clause
+  const context = PgIterator._parseRange(this, options)
 
-  // const command = `SELECT sum(pg_column_size(table)) FROM ${table} as table WHERE ...`
+  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${this._qname} as tbl`
+  context.clauses.unshift(head)
+
+  const text = context.clauses.join(' ')
+  const values = context.values
+
+  util.connect(this).then((client) => {
+    var result
+    client.query(text, values)
+    .on('error', (err) => {
+      debug('_approximateSize: query error: %j', err)
+      client.release(err)
+      cb(err)
+    })
+    .on('end', () => {
+      debug('_approximateSize: query end')
+      client.release()
+      cb(null, result)
+    })
+    .on('row', (row) => {
+      debug('_approximateSize: row %j', row)
+      result = Number(row.size)
+    })
+  })
+  .catch((err) => {
+    debug('_approximateSize: error: %j', err)
+    cb(err)
+  })
 }
 
 module.exports = PgDOWN

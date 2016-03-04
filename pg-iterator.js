@@ -15,31 +15,10 @@ function PgIterator (db, options) {
   this._keyAsBuffer = options.keyAsBuffer
   this._valueAsBuffer = options.valueAsBuffer
 
-  const params = this._params = []
-  const clauses = this._clauses = []
-  clauses.push(`SELECT key::bytea, value::bytea FROM ${db._qname}`)
-
-  this._processRange(options)
-
-  clauses.push('ORDER BY key ' + (options.reverse ? 'DESC' : 'ASC'))
-
-  const limit = this._limit = options.limit
-  if (limit >= 0) {
-    params.push(limit)
-    clauses.push('LIMIT $' + params.length)
-  }
-
-  // TODO: any reason not to add this?
-  // if (options.offset > 0) {
-  //   params.push(options.offset)
-  //   clauses.push('OFFSET $' + params.length)
-  // }
-
-  const command = this._clauses.join(' ')
-  debug('# PgIterator command %s %j', command, params)
+  const context = this._parseOptions(options)
 
   this._client = util.connect(db).then((client) => {
-    this._cursor = client.query(new Cursor(command, params))
+    this._cursor = client.query(new Cursor(context.text, context.values))
     return client
   })
 
@@ -52,22 +31,42 @@ function PgIterator (db, options) {
 
 inherits(PgIterator, AbstractIterator)
 
-PgIterator._comparators = {
-  eq: () => '=',
-  ne: () => '<>',
-  lt: () => '<',
-  lte: () => '<=',
-  min: () => '<=',
-  gt: () => '>',
-  gte: () => '>=',
-  max: () => '>=',
-  start: (range) => range.reverse ? '<=' : '>=',
-  end: (range) => range.reverse ? '>=' : '<='
+PgIterator._comparators = util.comparators
+
+PgIterator.prototype._windowSize = 100
+
+PgIterator.prototype._parseOptions = function (options) {
+  const context = {}
+  const clauses = context.clauses = []
+  const values = context.values = []
+
+  clauses.push(`SELECT key::bytea, value::bytea FROM ${this.db._qname}`)
+
+  PgIterator._parseRange(this.db, options, context)
+
+  clauses.push('ORDER BY key ' + (options.reverse ? 'DESC' : 'ASC'))
+
+  const limit = options.limit
+  if (limit >= 0) {
+    values.push(limit)
+    clauses.push('LIMIT $' + values.length)
+  }
+
+  // TODO: any reason not to add this?
+  // if (options.offset > 0) {
+  //   values.push(options.offset)
+  //   clauses.push('OFFSET $' + values.length)
+  // }
+
+  context.text = context.clauses.join(' ')
+  return context
 }
 
-PgIterator.prototype._processRange = function (range) {
-  const params = this._params
-  const clauses = this._clauses
+PgIterator._parseRange = function (db, range, context) {
+  context = context || {}
+  const clauses = context.clauses = context.clauses || []
+  const values = context.values = context.values || []
+
   clauses.push('WHERE')
 
   for (var k in range) {
@@ -75,8 +74,8 @@ PgIterator.prototype._processRange = function (range) {
     const comp = PgIterator._comparators[k]
     const op = comp && comp(range)
     if (op && v) {
-      params.push(util.serializeKey(v))
-      clauses.push(`(key) ${op} ($${params.length})`)
+      values.push(db._serializeKey(v))
+      clauses.push(`(key) ${op} ($${values.length})`)
       clauses.push('AND')
     } else {
       // throw on unknown?
@@ -85,13 +84,14 @@ PgIterator.prototype._processRange = function (range) {
 
   // drop the trailing clause
   clauses.pop()
+
+  return context
 }
 
-PgIterator.prototype._windowSize = 100
-
-PgIterator.prototype._write = function (row, cb) {
-  const key = util.deserializeKey(row.key, this._keyAsBuffer)
-  const value = util.deserializeValue(row.value, this._valueAsBuffer)
+PgIterator.prototype._send = function (row, cb) {
+  const db = this.db
+  const key = db._deserializeKey(row.key, this._keyAsBuffer)
+  const value = db._deserializeValue(row.value, this._valueAsBuffer)
 
   cb(null, key, value)
 }
@@ -101,14 +101,14 @@ PgIterator.prototype._next = function (cb) {
 
   this._client.then((client) => {
     const nextRow = this._rows && this._rows.shift()
-    if (nextRow) return this._write(nextRow, cb)
+    if (nextRow) return this._send(nextRow, cb)
 
     this._cursor.read(this._windowSize, (err, rows) => {
       if (err) return cb(err)
 
       this._rows = rows
       const firstRow = rows.shift()
-      firstRow ? this._write(firstRow, cb) : cb()
+      firstRow ? this._send(firstRow, cb) : cb()
     })
   })
   .catch((err) => this._cleanup(err, cb))
@@ -132,7 +132,7 @@ PgIterator.prototype._cleanup = function (err, cb) {
       })
     }
 
-    if (cb) cb(err || null)
+    if (cb) err ? cb(err) : cb()
   })
 
   if (cb) result.catch(cb)

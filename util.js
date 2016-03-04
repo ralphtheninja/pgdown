@@ -11,18 +11,26 @@ util.escapeIdentifier = pg.Client.prototype.escapeIdentifier
 
 util.isBuffer = AbstractLevelDOWN.prototype._isBuffer
 
-function deserialize (source, asBuffer) {
-  return asBuffer ? source : String(source || '')
-}
-
-function serialize (source) {
+util.serialize = function (source) {
   return util.isBuffer(source) ? source : source == null ? '' : String(source)
 }
 
-util.deserializeKey = deserialize
-util.deserializeValue = deserialize
-util.serializeKey = serialize
-util.serializeValue = serialize
+util.deserialize = function (source, asBuffer) {
+  return asBuffer ? source : String(source || '')
+}
+
+util.comparators = {
+  eq: () => '=',
+  ne: () => '<>',
+  lt: () => '<',
+  lte: () => '<=',
+  min: () => '<=',
+  gt: () => '>',
+  gte: () => '>=',
+  max: () => '>=',
+  start: (range) => range.reverse ? '<=' : '>=',
+  end: (range) => range.reverse ? '>=' : '<='
+}
 
 util.NotFoundError = errors.NotFoundError
 
@@ -49,55 +57,20 @@ util.destroyAll = function (cb) {
   })
 }
 
-util.connect = function (db) {
-  return new Promise((resolve, reject) => {
-    pg.connect(db._config, (err, client, done) => {
-      if (err) return reject(err)
-
-      // add creation timestamp to client
-      client.__id = mts()
-
-      // // override client query method
-      // var _query = client.query
-      // client.query = function (command, params) {
-      //   console.warn('SQL:', command, params)
-      //   return _query.apply(this, arguments)
-      // }
-
-      // add connection pool helper
-      client.release = (err) => {
-        client.release = () => {}
-        done(err)
-      }
-      resolve(client)
-    })
-  })
-}
-
-util.drop = function (db, cb) {
-  util.connect(db).then((client) => {
-    client.query(`DROP TABLE ${db._qname}`, (err) => {
-      client.release(err)
-      cb(err || null)
-    })
-  })
-  .catch((err) => cb(err))
-}
-
-// set pg defaults
-const defaults = util.defaults = {}
+// set up pg defaults
+const PG_DEFAULTS = util.PG_DEFAULTS = {}
 for (var key in pg.defaults) {
-  defaults[key] = pg.defaults[key]
+  PG_DEFAULTS[key] = pg.defaults[key]
 }
 
 // allow standard pg env vars to override some defaults
-defaults.database = process.env.PGDATABASE || defaults.database || 'postgres'
-defaults.user = process.env.PGUSER || defaults.user
-defaults.password = process.env.PGPASSWORD || defaults.password
-defaults.host = process.env.PGHOSTADDR || defaults.host
-defaults.port = Number(process.env.PGPORT) || defaults.port
+PG_DEFAULTS.database = process.env.PGDATABASE || PG_DEFAULTS.database || 'postgres'
+PG_DEFAULTS.user = process.env.PGUSER || PG_DEFAULTS.user
+PG_DEFAULTS.password = process.env.PGPASSWORD || PG_DEFAULTS.password
+PG_DEFAULTS.host = process.env.PGHOSTADDR || PG_DEFAULTS.host
+PG_DEFAULTS.port = Number(process.env.PGPORT) || PG_DEFAULTS.port
 
-util.config = function (location) {
+util.parseConfig = function (location) {
   const config = {}
 
   // TODO: complete postgres:// uri parsing
@@ -107,9 +80,9 @@ util.config = function (location) {
   const table = config._table = parts.pop()
   if (!table) throw new Error('location must specify table name')
 
-  // copy over defaults
-  for (var key in defaults) {
-    if (defaults[key] !== undefined) config[key] = defaults[key]
+  // copy over pg defaults
+  for (var key in PG_DEFAULTS) {
+    if (PG_DEFAULTS[key] !== undefined) config[key] = PG_DEFAULTS[key]
   }
 
   // location beginning with slash specifies database name
@@ -127,4 +100,68 @@ util.config = function (location) {
   // config._schema = parts.length ? parts.join('__') : 'public'
 
   return config
+}
+
+util.PG_ERRORS = {
+  drop_failure_non_existent: '42P01',
+  duplicate_database: '42P04',
+  invalid_catalog_name: '3D000'
+  // ...
+}
+
+util.connect = function (db) {
+  return new Promise((resolve, reject) => {
+    pg.connect(db._config, (err, client, done) => {
+      if (err) return reject(err)
+
+      // add creation timestamp to client
+      client.__id = mts()
+
+      // override client query method to never use callbacks
+      const _query = client.query
+      client.query = function (command, params, cb) {
+        if (typeof params === 'function') {
+          cb = params
+          params = []
+        }
+
+        // console.warn('COMMAND:', command.text || command)
+        const result = _query.apply(this, arguments)
+
+        if (cb) {
+          const rows = []
+          result.on('error', cb)
+          .on('row', (row) => rows.push(row))
+          .on('end', () => cb(rows))
+        }
+
+        return result
+      }
+
+      // add connection pool helper
+      client.release = (err) => {
+        client.release = () => {}
+        done(err)
+      }
+      resolve(client)
+    })
+  })
+}
+
+// TODO: create/drop database, e.g.:
+// https://github.com/olalonde/pgtools/blob/master/index.js
+
+util.dropTable = function (db, cb) {
+  util.connect(db).then((client) => {
+    client.query(`DROP TABLE ${db._qname}`, [])
+    .on('error', (err) => {
+      client.release(err)
+      cb(err)
+    })
+    .on('end', () => {
+      client.release()
+      cb()
+    })
+  })
+  .catch((err) => cb(err))
 }
