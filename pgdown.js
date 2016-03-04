@@ -31,6 +31,7 @@ function PgDOWN (location) {
 
   SQL._get = `SELECT value FROM ${qname} WHERE (key)=$1`
   SQL._put = SQL.__insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
+  SQL._del = `DELETE FROM ${qname} WHERE (key) = $1`
 }
 
 inherits(PgDOWN, AbstractLevelDOWN)
@@ -53,6 +54,17 @@ PgDOWN.prototype._deserializeKey = function (key, asBuffer) {
 PgDOWN.prototype._deserializeValue = function (value, asBuffer) {
   debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
   return util.deserialize(value, asBuffer)
+}
+
+PgDOWN.prototype._prepareStatement = function (method, values) {
+  const text = this._statements[method]
+  if (!text) throw new Error('no statement for method: ' + method)
+
+  const statement = {}
+  statement.name = 'pgdown##' + method
+  statement.text = text
+  statement.values = values
+  return statement
 }
 
 PgDOWN.prototype._open = function (options, cb) {
@@ -125,17 +137,6 @@ PgDOWN.prototype._close = function (cb) {
   })
 }
 
-PgDOWN.prototype._prepareStatement = function (method, values) {
-  const text = this._statements[method]
-  if (!text) throw new Error('no statement for method: ' + method)
-
-  const statement = {}
-  statement.name = 'pgdown##' + method
-  statement.text = text
-  statement.values = values
-  return statement
-}
-
 PgDOWN.prototype._get = function (key, options, cb) {
   debug('## _get (key = %j, options = %j, cb)', key, options)
 
@@ -143,7 +144,7 @@ PgDOWN.prototype._get = function (key, options, cb) {
 
   util.connect(this).then((client) => {
     // TODO: actually send statement properly
-    client._exec(statement.text, statement.values, (err, rows) => {
+    client._exec(statement, (err, rows) => {
       debug('_get: query result %j %j', err, rows)
       client.release(err)
 
@@ -166,12 +167,28 @@ PgDOWN.prototype._get = function (key, options, cb) {
 
 PgDOWN.prototype._put = function (key, value, options, cb) {
   debug('## _put (key = %j, value = %j, options = %j, cb)', key, value, options)
-  this._batch([{ type: 'put', key: key, value: value, options: options }], {}, cb)
+
+  util.connect(this).then((client) => {
+    const statement = this._prepareStatement('_put', [ key, value ])
+    client._exec(statement, (err) => {
+      client.release(err)
+      cb(err || null)
+    })
+  })
+  .catch((err) => this._cleanup(err))
 }
 
 PgDOWN.prototype._del = function (key, options, cb) {
   debug('## _del (key = %j, options = %j, cb)', key, options)
-  this._batch([{ type: 'del', key: key, options: options }], {}, cb)
+
+  util.connect(this).then((client) => {
+    const statement = this._prepareStatement('_del', [ key ])
+    client._exec(statement, (err) => {
+      client.release(err)
+      cb(err || null)
+    })
+  })
+  .catch((err) => this._cleanup(err))
 }
 
 PgDOWN.prototype._batch = function (ops, options, cb) {
@@ -204,16 +221,15 @@ PgDOWN.prototype._iterator = function (options) {
 PgDOWN.prototype._approximateSize = function (start, end, cb) {
   const options = { start: start, end: end }
   // generate standard iterator sql and replace head clause
-  const context = PgIterator._parseRange(this, options)
+  const statement = PgIterator._parseRange(this, options)
 
   const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${this._qname} as tbl`
-  context.clauses.unshift(head)
+  statement.clauses.unshift(head)
 
-  const text = context.clauses.join(' ')
-  const values = context.values
+  statement.text = statement.clauses.join(' ')
 
   util.connect(this).then((client) => {
-    client._exec(text, values, (err, rows) => {
+    client._exec(statement, (err, rows) => {
       debug('_approximateSize: query result %j %j', err, rows)
       client.release(err)
       const size = Number(rows[0] && rows[0].size)

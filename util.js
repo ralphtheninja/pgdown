@@ -121,7 +121,7 @@ util.connect = function (db) {
       client._exec = function (command, params, cb) {
         if (typeof params === 'function') {
           cb = params
-          params = []
+          params = null
         }
 
         // console.warn('COMMAND:', command.text || command)

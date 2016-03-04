@@ -36,9 +36,9 @@ PgChainedBatch.prototype._begin = function () {
 PgChainedBatch.prototype._put = function (key, value) {
   debug_v('# PgChainedBatch _put (key = %j, value = %j)', key, value)
 
+  const statement = this._db._prepareStatement('_put', [ key, value ])
   this._client.then((client) => {
-    const op = { type: 'put', key: key, value: value }
-    PgChainedBatch._commands.put(client, this._qname, op)
+    client._exec(statement)
   })
   .catch((err) => this._cleanup(err))
 }
@@ -46,23 +46,17 @@ PgChainedBatch.prototype._put = function (key, value) {
 PgChainedBatch.prototype._del = function (key) {
   debug_v('# PgChainedBatch _del (key = %j)', key)
 
+  const statement = this._db._prepareStatement('_del', [ key ])
   this._client.then((client) => {
-    const op = { type: 'del', key: key }
-    PgChainedBatch._commands.del(client, this._qname, op)
+    client._exec(statement)
   })
   .catch((err) => this._cleanup(err))
 }
 
 PgChainedBatch.prototype._clear = function () {
   debug('# PgChainedBatch _clear ()')
-  this._client.then((client) => {
-    // abort existing transaction and start a fresh one
-    client._exec('ROLLBACK; BEGIN')
-    .on('error', (err) => console.warn('WTF', err))
-    .on('drain', () => console.warn('drain'))
-    .on('end', () => console.warn('end'))
-  })
-  .catch((err) => this._cleanup(err))
+
+  // noop, for now
 }
 
 PgChainedBatch.prototype._write = function (cb) {
@@ -87,27 +81,6 @@ PgChainedBatch.prototype._cleanup = function (err, cb) {
   .catch(cb || ((err) => {
     if (!this._error) this._error = err
   }))
-}
-
-PgChainedBatch._commands = {}
-
-PgChainedBatch._commands.put = function (client, qname, op, cb) {
-  const INSERT = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
-  const UPSERT = INSERT + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  // const UPDATE = `UPDATE ${qname} SET value=($2) WHERE key=($1)`
-
-  // always an upsert for now
-  const command = UPSERT
-  const params = [ op.key, op.value ]
-
-  return client._exec(command, params, cb)
-}
-
-PgChainedBatch._commands.del = function (client, qname, op, cb) {
-  const command = `DELETE FROM ${qname} WHERE (key) = $1`
-  const params = [ op.key ]
-
-  return client._exec(command, params, cb)
 }
 
 module.exports = PgChainedBatch
