@@ -6,7 +6,8 @@
   "scripts": {
     "test": "PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test | faucet && npm run lint",
     "test:debug": "DEBUG=pgdown:* npm run test",
-    "lint": "standard"
+    "lint": "standard",
+    "nsp": "nsp check"
   },
   "keywords": [],
   "author": "Lars-Magnus Skog <ralphtheninja@riseup.net>",
@@ -29,6 +30,7 @@
     "after": "^0.8.1",
     "faucet": "0.0.1",
     "levelup": "^1.3.1",
+    "nsp": "^2.2.0",
     "standard": "^6.0.7",
     "tape": "^4.4.0"
   }

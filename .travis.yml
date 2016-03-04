@@ -11,3 +11,7 @@ before_install:
   - sudo /etc/init.d/postgresql stop
   - docker pull clkao/postgres-plv8:9.5
   - docker run -d -p 5432:5432 -v /tmp/data:/var/lib/postgresql/data --name some-postgres clkao/postgres-plv8:9.5
+
+script:
+  - npm test
+  - npm run nsp
