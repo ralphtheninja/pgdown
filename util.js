@@ -117,22 +117,21 @@ util.connect = function (db) {
       // add creation timestamp to client
       client.__id = mts()
 
-      // override client query method to never use callbacks
-      const _query = client.query
-      client.query = function (command, params, cb) {
+      // create a slightly better client query method
+      client._exec = function (command, params, cb) {
         if (typeof params === 'function') {
           cb = params
           params = []
         }
 
         // console.warn('COMMAND:', command.text || command)
-        const result = _query.apply(this, arguments)
+        const result = client.query(command, params)
 
         if (cb) {
           const rows = []
           result.on('error', cb)
           .on('row', (row) => rows.push(row))
-          .on('end', () => cb(rows))
+          .on('end', () => cb(null, rows))
         }
 
         return result

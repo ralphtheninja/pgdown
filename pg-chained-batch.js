@@ -14,7 +14,7 @@ function PgChainedBatch (db) {
   this._qname = db._qname
 
   this._client = util.connect(db).then((client) => {
-    client.query('BEGIN', [])
+    client._exec('BEGIN', [])
     return client
   })
 
@@ -32,7 +32,7 @@ PgChainedBatch.prototype._write = function (cb) {
   this._cb = cb
   this._client.then((client) => {
     // client.on('drain', (arg) => console.warn('COMMIT DRAIN', arg))
-    client.query('COMMIT', [])
+    client._exec('COMMIT', [])
     .on('error', () => (err) => this._cleanup(err, cb))
     .on('end', () => this._cleanup(null, cb))
   })
@@ -63,8 +63,8 @@ PgChainedBatch.prototype._clear = function () {
   debug('# PgChainedBatch _clear ()')
   this._client.then((client) => {
     // abort existing transaction and start a fresh one
-    client.query('ROLLBACK', [])
-    client.query('BEGIN', [])
+    client._exec('ROLLBACK', [])
+    client._exec('BEGIN', [])
   })
   .catch((err) => this._cleanup(err))
 }
@@ -92,14 +92,14 @@ PgChainedBatch._commands.put = function (client, qname, op, cb) {
   const command = UPSERT
   const params = [ op.key, op.value ]
 
-  return client.query(command, params, cb)
+  return client._exec(command, params, cb)
 }
 
 PgChainedBatch._commands.del = function (client, qname, op, cb) {
   const command = `DELETE FROM ${qname} WHERE (key) = $1`
   const params = [ op.key ]
 
-  return client.query(command, params, cb)
+  return client._exec(command, params, cb)
 }
 
 module.exports = PgChainedBatch

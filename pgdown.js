@@ -95,7 +95,7 @@ PgDOWN.prototype._open = function (options, cb) {
 
   debug('_open: command: %s', command)
   util.connect(this).then((client) => {
-    client.query(command, [])
+    client._exec(command, [])
     .on('error', (err) => {
       debug('_open: query error: %j', err)
       client.release(err)
@@ -148,7 +148,7 @@ PgDOWN.prototype._get = function (key, options, cb) {
 
   util.connect(this).then((client) => {
     var result, rowErr
-    client.query(statement)
+    client._exec(statement)
     .on('error', (err) => {
       debug('_get: query error: %j', err)
       client.release(err)
@@ -230,21 +230,15 @@ PgDOWN.prototype._approximateSize = function (start, end, cb) {
   const values = context.values
 
   util.connect(this).then((client) => {
-    var result
-    client.query(text, values)
-    .on('error', (err) => {
-      debug('_approximateSize: query error: %j', err)
+    client._exec(text, values, (err, rows) => {
+      debug('_approximateSize: query %j %j', err, rows)
       client.release(err)
-      cb(err)
-    })
-    .on('end', () => {
-      debug('_approximateSize: query end')
-      client.release()
-      cb(null, result)
-    })
-    .on('row', (row) => {
-      debug('_approximateSize: row %j', row)
-      result = Number(row.size)
+      const size = Number(rows[0] && rows[0].size)
+      if (isNaN(size)) {
+        cb(new Error('failed to calculate approximate size'))
+      } else {
+        cb(null, size)
+      }
     })
   })
   .catch((err) => {

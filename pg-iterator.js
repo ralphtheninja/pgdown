@@ -18,7 +18,7 @@ function PgIterator (db, options) {
   const context = this._parseOptions(options)
 
   this._client = util.connect(db).then((client) => {
-    this._cursor = client.query(new Cursor(context.text, context.values))
+    this._cursor = client._exec(new Cursor(context.text, context.values))
     return client
   })
 
