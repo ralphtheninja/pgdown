@@ -152,14 +152,9 @@ util.connect = function (db) {
 
 util.dropTable = function (db, cb) {
   util.connect(db).then((client) => {
-    client.query(`DROP TABLE ${db._qname}`, [])
-    .on('error', (err) => {
+    client._exec(`DROP TABLE ${db._qname}`, (err) => {
       client.release(err)
-      cb(err)
-    })
-    .on('end', () => {
-      client.release()
-      cb()
+      cb(err || null)
     })
   })
   .catch((err) => cb(err))
