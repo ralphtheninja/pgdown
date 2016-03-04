@@ -67,8 +67,9 @@ PgChainedBatch.prototype._clear = function () {
 }
 
 PgChainedBatch.prototype._cleanup = function (err, cb) {
-  const error = this._error || err
   this._client.then((client) => {
+    const error = this._error || err
+
     client.release(error)
     if (cb) cb(error || null)
   })
