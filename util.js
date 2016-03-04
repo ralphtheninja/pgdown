@@ -26,8 +26,6 @@ util.serializeValue = serialize
 
 util.NotFoundError = errors.NotFoundError
 
-util.pg = pg
-
 util.createPool = function (db) {
   // create a unique id to keep from pissing in the connection pool on close
   db._config._poolId = mts()
@@ -45,18 +43,24 @@ util.destroyPool = function (db, cb) {
   })
 }
 
+util.destroyAll = function (cb) {
+  process.nextTick(() => {
+    pg.end()
+    cb()
+  })
+}
+
 util.connect = function (db) {
   return new Promise((resolve, reject) => {
     pg.connect(db._config, (err, client, done) => {
-      if (err) {
-        reject(err)
-      } else {
-        client.release = (err) => {
-          client.release = () => {}
-          done(err)
-        }
-        resolve(client)
+      if (err) return reject(err)
+
+      // add query pool helper
+      client.release = (err) => {
+        client.release = () => {}
+        done(err)
       }
+      resolve(client)
     })
   })
 }

@@ -5,7 +5,7 @@ const Cursor = require('pg-cursor')
 const AbstractIterator = require('abstract-leveldown/abstract-iterator')
 const util = require('./util')
 const debug = require('debug')('pgdown')
-const debugv = require('debug')('pgdown:verbose')
+const debug_v = require('debug')('pgdown:verbose')
 
 function PgIterator (db, options) {
   debug('# new PgIterator (db, options = %j)', options)
@@ -93,12 +93,11 @@ PgIterator.prototype._write = function (row, cb) {
   const key = util.deserializeKey(row.key, this._keyAsBuffer)
   const value = util.deserializeValue(row.value, this._valueAsBuffer)
 
-  debugv('iterator write - row: %j, key: %j, value: %j', row, key, value)
   cb(null, key, value)
 }
 
 PgIterator.prototype._next = function (cb) {
-  debugv('# PgIterator _next (cb)')
+  debug_v('# PgIterator _next (cb)')
 
   this._client.then((client) => {
     const nextRow = this._rows && this._rows.shift()
@@ -116,7 +115,7 @@ PgIterator.prototype._next = function (cb) {
 }
 
 PgIterator.prototype._end = function (cb) {
-  debug('# PgIterator _end (cb)')
+  debug_v('# PgIterator _end (cb)')
 
   this._cleanup(null, cb)
 }
@@ -127,7 +126,7 @@ PgIterator.prototype._cleanup = function (err, cb) {
 
     if (this._cursor) {
       this._cursor.close(() => {
-        debugv('_iterator: cursor closed')
+        debug_v('_iterator: cursor ended')
       })
       this._cursor = null
     }

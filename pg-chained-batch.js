@@ -4,7 +4,7 @@ const inherits = require('inherits')
 const AbstractChainedBatch = require('abstract-leveldown/abstract-chained-batch')
 const util = require('./util')
 const debug = require('debug')('pgdown')
-const debugv = require('debug')('pgdown:verbose')
+const debug_v = require('debug')('pgdown:verbose')
 
 function PgChainedBatch (db) {
   debug('# new PgChainedBatch (db)')
@@ -28,6 +28,7 @@ function PgChainedBatch (db) {
 inherits(PgChainedBatch, AbstractChainedBatch)
 
 PgChainedBatch.prototype._write = function (cb) {
+  debug('# PgChainedBatch _write (cb)')
   this._cb = cb
   this._client.then((client) => {
     client.query('COMMIT', (err) => this._cleanup(err, cb))
@@ -36,7 +37,7 @@ PgChainedBatch.prototype._write = function (cb) {
 }
 
 PgChainedBatch.prototype._put = function (key, value) {
-  debugv('# PgChainedBatch _put (key = %j, value = %j)', key, value)
+  debug_v('# PgChainedBatch _put (key = %j, value = %j)', key, value)
 
   this._client.then((client) => {
     const op = { type: 'put', key: key, value: value }
@@ -46,7 +47,7 @@ PgChainedBatch.prototype._put = function (key, value) {
 }
 
 PgChainedBatch.prototype._del = function (key) {
-  debugv('# PgChainedBatch _del (key = %j)', key)
+  debug_v('# PgChainedBatch _del (key = %j)', key)
 
   this._client.then((client) => {
     const op = { type: 'del', key: key }
@@ -86,7 +87,6 @@ PgChainedBatch._commands.put = function (client, qname, op, cb) {
   // always an upsert for now
   const command = UPSERT
   const params = [ op.key, op.value ]
-  debugv('put command: %s %j', command, params)
 
   return client.query(command, params, cb)
 }
@@ -94,7 +94,6 @@ PgChainedBatch._commands.put = function (client, qname, op, cb) {
 PgChainedBatch._commands.del = function (client, qname, op, cb) {
   const command = `DELETE FROM ${qname} WHERE (key) = $1`
   const params = [ op.key ]
-  debugv('del command: %s %j', command, params)
 
   return client.query(command, params, cb)
 }

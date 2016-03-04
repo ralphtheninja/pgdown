@@ -6,7 +6,7 @@ const util = require('./util')
 const PgIterator = require('./pg-iterator')
 const PgChainedBatch = require('./pg-chained-batch')
 const debug = require('debug')('pgdown')
-const debugv = require('debug')('pgdown:verbose')
+const debug_v = require('debug')('pgdown:verbose')
 
 function PgDOWN (location) {
   if (!(this instanceof PgDOWN)) {
@@ -27,12 +27,12 @@ function PgDOWN (location) {
 inherits(PgDOWN, AbstractLevelDOWN)
 
 PgDOWN.prototype._serializeKey = function (key) {
-  debugv('## _serializeKey (key = %j)', key)
+  debug_v('## _serializeKey (key = %j)', key)
   return util.serializeKey(key)
 }
 
 PgDOWN.prototype._serializeValue = function (value) {
-  debugv('## _serializeValue (value = %j)', value)
+  debug_v('## _serializeValue (value = %j)', value)
   return util.serializeValue(value)
 }
 

@@ -6,7 +6,7 @@ const PgDOWN = require('../')
 const common = exports
 
 common._prefix = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
-util.pg.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
+util.defaults.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
 
 var _count = 0
 var _last
@@ -16,8 +16,7 @@ common.lastLocation = () => _last
 common.location = (loc) => (_last = loc || (common._prefix + (++_count)))
 
 common.cleanup = (cb) => {
-  util.pg.end()
-  cb()
+  util.destroyAll(cb)
 }
 
 common.setUp = (t) => {
