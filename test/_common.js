@@ -49,20 +49,20 @@ common.collectEntries = function (iterator, cb) {
 }
 
 // hack _open to drop tables at first open
-const dropped = {}
+const DROPPED = {}
 
 const _PgDOWN_open = PgDOWN.prototype._open
 PgDOWN.prototype._open = function (options, cb) {
-  const table = this._table
+  const location = this.location
 
-  if (table !== _last || dropped[table]) {
+  if (location !== _last || DROPPED[location]) {
     return _PgDOWN_open.call(this, options, cb)
   }
 
   util.drop(this, (err) => {
     if (err && err.routine !== 'DropErrorMsgNonExistent') return cb(err)
 
-    dropped[table] = true
+    DROPPED[location] = true
     _PgDOWN_open.call(this, options, cb)
   })
 }

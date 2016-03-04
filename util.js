@@ -71,16 +71,47 @@ util.drop = function (db, cb) {
   .catch((err) => cb(err))
 }
 
-// TODO: binary? parseInt8?
+// set pg defaults
+const defaults = util.defaults = {}
+for (var key in pg.defaults) {
+  defaults[key] = pg.defaults[key]
+}
 
-util.CONFIG_KEYS = [
-  'user',
-  'password',
-  'host',
-  'port',
-  'ssl',
-  'rows',
-  'poolSize',
-  'poolIdleTimeout',
-  'reapIntervalMillis'
-]
+// allow standard pg env vars to override some defaults
+defaults.database = process.env.PGDATABASE || defaults.database || 'postgres'
+defaults.user = process.env.PGUSER || defaults.user
+defaults.password = process.env.PGPASSWORD || defaults.password
+defaults.host = process.env.PGHOSTADDR || defaults.host
+defaults.port = Number(process.env.PGPORT) || defaults.port
+
+util.config = function (location) {
+  const config = {}
+
+  // TODO: complete postgres:// uri parsing
+  const parts = location.split('/')
+
+  // last component of location specifies table name
+  const table = config._table = parts.pop()
+  if (!table) throw new Error('location must specify table name')
+
+  // copy over defaults
+  for (var key in defaults) {
+    if (defaults[key] !== undefined) config[key] = defaults[key]
+  }
+
+  // location beginning with slash specifies database name
+  if (location[0] === '/') {
+    parts.shift()
+    config.database = parts.shift() || config.database
+  }
+
+  // NB: this will eventually allow us to support subleveling natively
+  // TODO: use extra path parts for schema name
+  if (parts.length) throw new Error('schema paths NYI')
+
+  // remaining components represent schema namespace
+  // TODO: surface default `public` schema in opts?
+  // config._schema = parts.length ? parts.join('__') : 'public'
+
+  return config
+}

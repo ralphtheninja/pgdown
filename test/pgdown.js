@@ -2,16 +2,17 @@
 
 const test = require('tape')
 const common = require('./_common')
-const UTIL = require('../util')
+const util = require('../util')
 const PgDOWN = require('../')
 
 test('constructor', (t) => {
   t.test('defaults', (t) => {
     const db = PgDOWN(common.location())
-    t.equal(db._config.database, UTIL.pg.defaults.database, 'default database')
-    t.equal(db._table.indexOf(common._prefix), 0, 'table name uses test prefix')
-    t.ok(db._qname.indexOf(db._table) >= 0, 'qname includes table name')
-    t.equal(db._schema, undefined, 'no schema')
+    const config = db._config
+    t.equal(config.database, util.defaults.database, 'uses default database')
+    t.equal(config._table.indexOf(common._prefix), 0, 'table name uses test prefix')
+    t.ok(db._qname.indexOf(config._table) >= 0, 'qualified name includes table name')
+    t.equal(config._schema, undefined, 'no schema')
     t.end()
   })
 })
@@ -36,10 +37,10 @@ test('open', (t) => {
     })
   })
 
-  t.skip('invalid table name', (t) => {
-    const table = common.location('pg_invalid_table__')
+  t.test('malformed table name', (t) => {
+    const table = common.location('malformed_\0_table')
     const db = PgDOWN(table)
-    t.equal(db._table, table, 'table name set')
+    t.equal(db._config._table, table, 'table name in config')
 
     db.open((err) => {
       t.ok(err, 'error on open')
@@ -47,10 +48,11 @@ test('open', (t) => {
     })
   })
 
-  t.test('malformed table name', (t) => {
-    const table = common.location('malformed_\0_table')
+  // NB: pg_ prefixed tables are probably fine now
+  t.skip('invalid table name', (t) => {
+    const table = common.location('pg_invalid_table__')
     const db = PgDOWN(table)
-    t.equal(db._table, table, 'table name set')
+    t.equal(db._config._table, table, 'table name in config')
 
     db.open((err) => {
       t.ok(err, 'error on open')

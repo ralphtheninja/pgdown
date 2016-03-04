@@ -8,7 +8,7 @@ const debug = require('debug')('pgdown')
 const debugv = require('debug')('pgdown:verbose')
 
 function PgIterator (db, options) {
-  debug('# PgIterator (db, options = %j)', options)
+  debug('# new PgIterator (db, options = %j)', options)
 
   AbstractIterator.call(this, db)
 

@@ -14,39 +14,14 @@ function PgDOWN (location) {
   }
 
   AbstractLevelDOWN.call(this, location)
+  debug('# new PgDOWN (location = %j)', location)
 
-  debug('# PgDOWN (location = %j)', location)
-  const parts = location.split('/')
-
-  // last component of location specifies table name
-  const table = this._table = parts.pop()
-  if (!table) throw new Error('location must specify table name')
-
-  const defaults = util.pg.defaults
-  const config = this._config = {}
-
-  // if location begins with a slash it specifies database name
-  if (location[0] === '/') {
-    parts.shift()
-    config.database = parts.shift()
-  }
-
-  config.database = config.database || defaults.database || 'postgres'
-
-  debug('pg config: %j, defaults: %j', config, defaults)
-
-  // NB: this will eventually allow us to support subleveling natively
-  // TODO: use extra path parts for schema name
-  if (parts.length) throw new Error('schema paths NYI')
-
-  // remaining components represent schema namespace
-  // this._schema = parts.length ? util.escapeIdentifier(parts.join('__')) : ''
+  this._config = util.config(location)
+  debug('pg config: %j', this._config)
 
   // set qualified name
-  this._qname = util.escapeIdentifier(this._table)
-  // TODO: if (this._schema) qname = this._schema + '.' + this._table, escaped
-
-  // TODO: surface default `public` schema in opts?
+  this._qname = util.escapeIdentifier(this._config._table)
+  // TODO: if (schema) qname = schema + '.' + table, escaped
 }
 
 inherits(PgDOWN, AbstractLevelDOWN)
@@ -64,20 +39,6 @@ PgDOWN.prototype._serializeValue = function (value) {
 PgDOWN.prototype._open = function (options, cb) {
   debug('## _open (options = %j, cb)', options)
 
-  const config = this._config
-
-  // verify that database name in options matches the one we're connecting to
-  if (options.database && options.database !== config.databasae) {
-    throw new Error('specified database does not match db location')
-  }
-
-  // copy over pg other options
-  util.CONFIG_KEYS.forEach((key) => {
-    if (options[key] !== undefined) config[key] = options[key]
-  })
-
-  debug('_open: pg config: %j', config)
-
   util.createPool(this)
 
   const createIfMissing = options.createIfMissing
@@ -87,18 +48,19 @@ PgDOWN.prototype._open = function (options, cb) {
   var command = ''
 
   if (errorIfExists || !createIfMissing) {
-    // TODO: find a cleaner way to do this
+    // TODO: find a cleaner way to do this (e.g. pg_class, pg_namespace tables)
     command += `
       SELECT COUNT(*) from ${qname} LIMIT 1;
     `
   }
 
   // create associated schema along w/ table, if specified
-  if (createIfMissing && this._schema) {
-    command += `
-      CREATE SCHEMA ${IF_NOT_EXISTS} ${util.escapeIdentifier(this._schema)};
-    `
-  }
+  // const schema = util.escapeIdentifier(this._config._schema)
+  // if (createIfMissing && schema) {
+  //   command += `
+  //     CREATE SCHEMA ${IF_NOT_EXISTS} ${util.escapeIdentifier(this._schema)};
+  //   `
+  // }
 
   if (createIfMissing) {
     // TODO: support for jsonb, bytea using serialize[Key|Value]
@@ -112,7 +74,7 @@ PgDOWN.prototype._open = function (options, cb) {
     `
   }
 
-  debug('_open: command %s', command)
+  debug('_open: command: %s', command)
   util.connect(this).then((client) => {
     client.query(command, (err) => {
       client.release(err)

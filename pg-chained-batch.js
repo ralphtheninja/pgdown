@@ -7,7 +7,7 @@ const debug = require('debug')('pgdown')
 const debugv = require('debug')('pgdown:verbose')
 
 function PgChainedBatch (db) {
-  debug('# PgChainedBatch (db)')
+  debug('# new PgChainedBatch (db)')
 
   AbstractChainedBatch.call(this, db)
 
