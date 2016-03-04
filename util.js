@@ -26,20 +26,19 @@ util.serializeValue = serialize
 
 util.NotFoundError = errors.NotFoundError
 
-util.createPool = function (db) {
+util.createPool = function (config) {
   // create a unique id to keep from pissing in the connection pool on close
-  db._config._poolId = mts()
-  return (db._pool = pg.pools.getOrCreate(db._config))
+  config.__id = mts()
+  return pg.pools.getOrCreate(config)
 }
 
-util.destroyPool = function (db, cb) {
-  // grab a handle to current pool
-  const pool = db._pool
+util.destroyPool = function (pool, cb) {
+  // remove from pg pools
+  delete pg.pools.all[pool.getName()]
 
-  // TODO: add timeout for when drain hangs?
+  // TODO: timeout to handle drain hangs?
   pool.drain(() => {
-    pool.destroyAllNow()
-    cb()
+    pool.destroyAllNow(cb)
   })
 }
 
@@ -55,6 +54,9 @@ util.connect = function (db) {
     pg.connect(db._config, (err, client, done) => {
       if (err) return reject(err)
 
+      // add creation timestamp to client
+      client.__id = mts()
+
       // // override client query method
       // var _query = client.query
       // client.query = function (command, params) {
@@ -62,7 +64,7 @@ util.connect = function (db) {
       //   return _query.apply(this, arguments)
       // }
 
-      // add query pool helper
+      // add connection pool helper
       client.release = (err) => {
         client.release = () => {}
         done(err)

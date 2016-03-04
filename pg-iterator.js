@@ -122,10 +122,10 @@ PgIterator.prototype._end = function (cb) {
 
 PgIterator.prototype._cleanup = function (err, cb) {
   const result = this._client.then((client) => {
-    if (this._closing) {
+    if (this._closed) {
       client.release(err)
     } else {
-      this._closing = true
+      this._closed = true
       this._cursor.close(() => {
         debug_v('_iterator: cursor closed')
         client.release(err)

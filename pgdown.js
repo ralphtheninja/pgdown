@@ -39,7 +39,11 @@ PgDOWN.prototype._serializeValue = function (value) {
 PgDOWN.prototype._open = function (options, cb) {
   debug('## _open (options = %j, cb)', options)
 
-  util.createPool(this)
+  this._pool = util.createPool(this._config)
+
+  // this._pool.on('error', (err) => {
+  //   debug('pool error: %j', err)
+  // })
 
   const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
@@ -76,7 +80,7 @@ PgDOWN.prototype._open = function (options, cb) {
 
   debug('_open: command: %s', command)
   util.connect(this).then((client) => {
-    client.query(command, (err) => {
+    client.query(command, [], (err) => {
       client.release(err)
 
       if (!err && !createIfMissing && errorIfExists) {
@@ -94,7 +98,13 @@ PgDOWN.prototype._open = function (options, cb) {
 PgDOWN.prototype._close = function (cb) {
   debug('## _close (cb)')
 
-  util.destroyPool(this, cb)
+  util.destroyPool(this._pool, (err) => {
+    if (err) return cb(err)
+
+    // remove pool reference from db
+    this._pool = null
+    cb()
+  })
 }
 
 PgDOWN.prototype._get = function (key, options, cb) {
