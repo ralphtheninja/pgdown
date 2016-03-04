@@ -213,14 +213,10 @@ PgDOWN.prototype._iterator = function (options) {
   return new PgIterator(this, options)
 }
 
-// PgDOWN.prototype.approximateSize = function () {
-//   const command = `
-//     SELECT nspname || '.' || relname AS "name", pg_relation_size(C.oid) AS "size"
-//     FROM pg_class C
-//     LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
-//     WHERE nspname = 'public' AND relname = 'pgdown_test_10_pkey'
-//     ORDER BY pg_relation_size(C.oid) DESC;
-//   `
-// }
+PgDOWN.prototype.approximateSize = function () {
+  throw new Error('NYI')
+
+  // const command = `SELECT sum(pg_column_size(table)) FROM ${table} as table WHERE ...`
+}
 
 module.exports = PgDOWN
