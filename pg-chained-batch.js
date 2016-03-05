@@ -11,8 +11,6 @@ function PgChainedBatch (db) {
 
   AbstractChainedBatch.call(this, db)
 
-  this._qname = db._qname
-
   this._client = this._begin()
 }
 
@@ -20,14 +18,20 @@ inherits(PgChainedBatch, AbstractChainedBatch)
 
 PgChainedBatch.prototype._begin = function () {
   const client = util.connect(this._db).then((client) => {
-    client._exec('BEGIN')
+    this._db._pool.on('destroy', () => {
+      client._exec('ROLLBACK', (err) => client.release(err))
+    })
+
+    client._exec('BEGIN', (err) => {
+      if (err || !this.error) this.error = err
+    })
     return client
   })
 
   // ensure cleanup for initialization errors
   client.catch((err) => {
-    debug('_chainedBatch initialization error: %j', err)
-    if (this._client === client) this._cleanup(err)
+    debug('batch initialization error %j', err)
+    this._cleanup(err)
   })
 
   return client
@@ -38,7 +42,9 @@ PgChainedBatch.prototype._put = function (key, value) {
 
   const statement = this._db._prepareStatement('_put', [ key, value ])
   this._client.then((client) => {
-    client._exec(statement)
+    client._exec(statement.text, statement.values, (err) => {
+      this._error = this._error || err
+    })
   })
   .catch((err) => this._cleanup(err))
 }
@@ -48,7 +54,9 @@ PgChainedBatch.prototype._del = function (key) {
 
   const statement = this._db._prepareStatement('_del', [ key ])
   this._client.then((client) => {
-    client._exec(statement)
+    client._exec(statement.text, statement.values, (err) => {
+      this._error = this._error || err
+    })
   })
   .catch((err) => this._cleanup(err))
 }
@@ -56,27 +64,29 @@ PgChainedBatch.prototype._del = function (key) {
 PgChainedBatch.prototype._clear = function () {
   debug('# PgChainedBatch _clear ()')
 
-  // noop, for now
+  this._client.then((client) => {
+    // abort existing transaction and start a fresh one
+    client._exec('ROLLBACK; BEGIN', (err) => {
+      this._error = this._error || err
+    })
+  })
+  .catch((err) => this._cleanup(err))
 }
 
 PgChainedBatch.prototype._write = function (cb) {
   debug('# PgChainedBatch _write (cb)')
-  this._cb = cb
+
   this._client.then((client) => {
-    // client.on('drain', (arg) => console.warn('COMMIT DRAIN', arg))
-    client._exec('COMMIT', [])
-    .on('error', () => (err) => this._cleanup(err, cb))
-    .on('end', () => this._cleanup(null, cb))
+    const action = this._error ? 'ROLLBACK' : 'COMMIT'
+    client._exec(action, (err) => this._cleanup(err, cb))
   })
   .catch((err) => this._cleanup(err, cb))
 }
 
 PgChainedBatch.prototype._cleanup = function (err, cb) {
   this._client.then((client) => {
-    const error = this._error || err
-
-    client.release(error)
-    if (cb) cb(error || null)
+    client.release(this._error || err)
+    if (cb) cb(this._error || err || null)
   })
   .catch(cb || ((err) => {
     if (!this._error) this._error = err

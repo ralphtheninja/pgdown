@@ -1,3 +1,5 @@
+'use strict'
+
 const after = require('after')
 const levelup = require('levelup')
 const test = require('tape')
@@ -90,17 +92,17 @@ test('crud', (t) => {
 
       const done = after(batch.length, t.end)
 
-      db.get('aa', (err, record) => {
+      db.get('aa', (err, value) => {
+        t.deepEqual(value, sorted[0].value, 'aa')
         done(err)
-        t.deepEqual(record, sorted[0].value, 'aa')
       })
-      db.get('ab', (err, record) => {
+      db.get('ab', (err, value) => {
+        t.deepEqual(value, sorted[1].value, 'ab')
         done(err)
-        t.deepEqual(record, sorted[1].value, 'ab')
       })
-      db.get('ac', (err, record) => {
+      db.get('ac', (err, value) => {
+        t.deepEqual(value, sorted[2].value, 'ac')
         done(err)
-        t.deepEqual(record, sorted[2].value, 'ac')
       })
     })
   })

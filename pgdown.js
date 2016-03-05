@@ -196,16 +196,16 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
 
   ops.forEach((op) => {
     // TODO: merge op.options with batch options?
-    if (op.type === 'del') {
-      batch._del(op.key, op.options)
-    } else if (op.type === 'put') {
-      batch._put(op.key, op.value, op.options)
+    if (op.type === 'put') {
+      batch._put(op.key, op.value)
+    } else if (op.type === 'del') {
+      batch._del(op.key)
     } else {
-      debug('_batch: unknown operation: %j', op)
+      debug('_batch: unknown operation %j', op)
     }
   })
 
-  batch._write(cb)
+  process.nextTick(() => batch._write(cb))
 }
 
 PgDOWN.prototype._chainedBatch = function () {

@@ -49,6 +49,14 @@ common.collectEntries = function (iterator, cb) {
   next()
 }
 
+common.maxCompressionFactor = 0.01
+
+common.checkBatchSize = function (batch, size) {
+  // very specific to leveldb, accounts for snappy compression
+  const total = batch.reduce((n, op) => n + (op.key + op.value).length, 0)
+  return size > total * common.maxCompressionFactor
+}
+
 // hack _open to drop tables at first open
 const DROPPED = {}
 
@@ -61,8 +69,7 @@ PgDOWN.prototype._open = function (options, cb) {
   }
 
   util.dropTable(this, (err) => {
-    // TODO: err.code == '42P01'
-    if (err && err.routine !== 'DropErrorMsgNonExistent') return cb(err)
+    if (err) return cb(err)
 
     DROPPED[location] = true
     _PgDOWN_open.call(this, options, cb)

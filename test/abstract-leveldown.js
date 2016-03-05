@@ -12,7 +12,7 @@ const suites = {
   leveldown: require('abstract-leveldown/abstract/leveldown-test').args,
   open: require('abstract-leveldown/abstract/open-test').all,
   close: require('abstract-leveldown/abstract/close-test').close,
-  // approximateSize: require('abstract-leveldown/abstract/approximate-size-test').all,
+  approximateSize: require('abstract-leveldown/abstract/approximate-size-test').all,
   put: require('abstract-leveldown/abstract/put-test').all,
   del: require('abstract-leveldown/abstract/del-test').all,
   get: require('abstract-leveldown/abstract/get-test').all,

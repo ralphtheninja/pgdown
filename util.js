@@ -42,7 +42,11 @@ util.createPool = function (config) {
 
 util.destroyPool = function (pool, cb) {
   // remove from pg pools
+  if (!pool) return process.nextTick(cb)
+
   delete pg.pools.all[pool.getName()]
+
+  pool.emit('destroy', new Error('pool destroyed'))
 
   // TODO: timeout to handle drain hangs?
   pool.drain(() => {
@@ -152,7 +156,7 @@ util.connect = function (db) {
 
 util.dropTable = function (db, cb) {
   util.connect(db).then((client) => {
-    client._exec(`DROP TABLE ${db._qname}`, (err) => {
+    client._exec(`DROP TABLE IF EXISTS ${db._qname}`, (err) => {
       client.release(err)
       cb(err || null)
     })
