@@ -23,15 +23,12 @@ function PgDOWN (location) {
   const qname = this._qname = util.escapeIdentifier(this._config._table)
   // TODO: if (schema) qname = schema + '.' + table, escaped
 
-  // TODO: move all this to a lib
-  const SQL = this._statements = {}
+  this._sql_insert = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
+  this._sql_update = `UPDATE ${qname} SET value=($2) WHERE key=($1)`
 
-  SQL.__insert = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
-  SQL.__update = `UPDATE ${qname} SET value=($2) WHERE key=($1)`
-
-  SQL._get = `SELECT value FROM ${qname} WHERE (key)=$1`
-  SQL._put = SQL.__insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  SQL._del = `DELETE FROM ${qname} WHERE (key) = $1`
+  this._sql_get = `SELECT value FROM ${qname} WHERE (key)=$1`
+  this._sql_put = this._sql_insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
+  this._sql_del = `DELETE FROM ${qname} WHERE (key) = $1`
 }
 
 inherits(PgDOWN, AbstractLevelDOWN)
@@ -54,17 +51,6 @@ PgDOWN.prototype._deserializeKey = function (key, asBuffer) {
 PgDOWN.prototype._deserializeValue = function (value, asBuffer) {
   debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
   return util.deserialize(value, asBuffer)
-}
-
-PgDOWN.prototype._prepareStatement = function (method, values) {
-  const text = this._statements[method]
-  if (!text) throw new Error('no statement for method: ' + method)
-
-  const statement = {}
-  statement.name = 'pgdown##' + method
-  statement.text = text
-  statement.values = values
-  return statement
 }
 
 PgDOWN.prototype._open = function (options, cb) {
@@ -105,107 +91,67 @@ PgDOWN.prototype._open = function (options, cb) {
     `
   }
 
-  util.connect(this).then((client) => {
-    client._exec(text, [], (err, rows) => {
-      debug('_open: query result %j %j', err, rows)
-      client.release(err)
+  this._pool.query(text, (err) => {
+    debug('_open: query result %j', err)
 
-      if (err) {
-        cb(err)
-      } else if (errorIfExists && !createIfMissing) {
-        cb(new Error('table exists: ' + qname))
-      } else {
-        cb()
-      }
-    })
-  })
-  .catch((err) => {
-    debug('_open: error: %j', err)
-    cb(err)
+    if (err) {
+      cb(err)
+    } else if (errorIfExists && !createIfMissing) {
+      cb(new Error('table exists: ' + qname))
+    } else {
+      cb()
+    }
   })
 }
 
 PgDOWN.prototype._close = function (cb) {
   debug('## _close (cb)')
-
-  util.destroyPool(this._pool, (err) => {
-    if (err) return cb(err)
-
-    // remove pool reference from db
-    this._pool = null
-    cb()
-  })
+  this._pool.close(cb)
 }
 
 PgDOWN.prototype._get = function (key, options, cb) {
   debug('## _get (key = %j, options = %j, cb)', key, options)
 
-  const statement = this._prepareStatement('_get', [ key ])
+  this._pool.query(this._sql_get, [ key ], (err, result) => {
+    debug('_get: query result %j %j', err, result)
 
-  util.connect(this).then((client) => {
-    // TODO: actually send statement properly
-    client._exec(statement, (err, rows) => {
-      debug('_get: query result %j %j', err, rows)
-      client.release(err)
-
-      if (err) {
-        cb(err)
-      } else if (!rows || rows.length > 1) {
-        cb(new Error('unexpected result for key: ' + key))
-      } else if (!rows.length) {
-        cb(new util.NotFoundError('not found: ' + key))
-      } else {
-        cb(null, this._deserializeValue(rows[0].value, options.asBuffer))
-      }
-    })
-  })
-  .catch((err) => {
-    debug('_get: error: %j', err)
-    cb(err)
+    if (err) {
+      cb(err)
+    } else if (result.rowCount === 1) {
+      cb(null, this._deserializeValue(result.rows[0].value, options.asBuffer))
+    } else if (result.rowCount === 0) {
+      cb(new util.NotFoundError('not found: ' + key))
+    } else {
+      cb(new Error('unexpected result for key: ' + key))
+    }
   })
 }
 
 PgDOWN.prototype._put = function (key, value, options, cb) {
   debug('## _put (key = %j, value = %j, options = %j, cb)', key, value, options)
-
-  util.connect(this).then((client) => {
-    const statement = this._prepareStatement('_put', [ key, value ])
-    client._exec(statement, (err) => {
-      client.release(err)
-      cb(err || null)
-    })
-  })
-  .catch((err) => this._cleanup(err))
+  this._pool.query(this._sql_put, [ key, value ], (err) => cb(err || null))
 }
 
 PgDOWN.prototype._del = function (key, options, cb) {
   debug('## _del (key = %j, options = %j, cb)', key, options)
-
-  util.connect(this).then((client) => {
-    const statement = this._prepareStatement('_del', [ key ])
-    client._exec(statement, (err) => {
-      client.release(err)
-      cb(err || null)
-    })
-  })
-  .catch((err) => this._cleanup(err))
+  this._pool.query(this._sql_del, [ key ], (err) => cb(err || null))
 }
 
 PgDOWN.prototype._batch = function (ops, options, cb) {
-  var batch = this._chainedBatch()
+  const tx = util.createTransaction(this._pool)
 
   ops.forEach((op) => {
     // TODO: merge op.options with batch options?
     if (op.type === 'put') {
-      batch._put(op.key, op.value)
+      tx.query(this._sql_put, [ op.key, op.value ])
     } else if (op.type === 'del') {
-      batch._del(op.key)
+      tx.query(this._sql_del, [ op.key ])
     } else {
       debug('_batch: unknown operation %j', op)
     }
   })
 
-  process.nextTick(() => batch._write(cb))
+  tx.commit((err) => cb(err || null))
 }
 
 PgDOWN.prototype._chainedBatch = function () {
@@ -221,28 +167,23 @@ PgDOWN.prototype._iterator = function (options) {
 PgDOWN.prototype._approximateSize = function (start, end, cb) {
   const options = { start: start, end: end }
   // generate standard iterator sql and replace head clause
-  const statement = PgIterator._parseRange(this, options)
+  const context = PgIterator._parseRange(this, options)
 
   const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${this._qname} as tbl`
-  statement.clauses.unshift(head)
+  context.clauses.unshift(head)
+  const text = context.clauses.join(' ')
 
-  statement.text = statement.clauses.join(' ')
+  this._pool.query(text, context.values, (err, result) => {
+    debug('_approximateSize: query result %j %j', err, result)
+    if (err) return cb(err)
 
-  util.connect(this).then((client) => {
-    client._exec(statement, (err, rows) => {
-      debug('_approximateSize: query result %j %j', err, rows)
-      client.release(err)
-      const size = Number(rows[0] && rows[0].size)
-      if (isNaN(size)) {
-        cb(new Error('failed to calculate approximate size'))
-      } else {
-        cb(null, size)
-      }
-    })
-  })
-  .catch((err) => {
-    debug('_approximateSize: error: %j', err)
-    cb(err)
+    const row = Number(result.rows[0])
+    const size = result.rowCount && Number(result.rows[0].size)
+    if (result.rowCount === 1 && !isNaN(size)) {
+      cb(null, size)
+    } else {
+      cb(new Error('failed to calculate approximate size'))
+    }
   })
 }
 

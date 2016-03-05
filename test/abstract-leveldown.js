@@ -19,8 +19,8 @@ const suites = {
   put_get_del: require('abstract-leveldown/abstract/put-get-del-test').all,
   iterator: require('abstract-leveldown/abstract/iterator-test').all,
   ranges: require('abstract-leveldown/abstract/ranges-test').all,
-  batch: require('abstract-leveldown/abstract/batch-test').all
-  // chainedBatch: require('abstract-leveldown/abstract/chained-batch-test').all
+  batch: require('abstract-leveldown/abstract/batch-test').all,
+  chainedBatch: require('abstract-leveldown/abstract/chained-batch-test').all
 }
 
 const factories = [ PgDOWN ]

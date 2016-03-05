@@ -1,7 +1,6 @@
 'use strict'
 
 const inherits = require('inherits')
-const Cursor = require('pg-cursor')
 const AbstractIterator = require('abstract-leveldown/abstract-iterator')
 const util = require('./util')
 const debug = require('debug')('pgdown')
@@ -14,26 +13,26 @@ function PgIterator (db, options) {
 
   this._keyAsBuffer = options.keyAsBuffer
   this._valueAsBuffer = options.valueAsBuffer
+  this._hasEnded = false
+  this._error = null
 
   const context = this._parseOptions(options)
+  this._stream = db._pool.query(context.text, context.values)
 
-  this._client = util.connect(db).then((client) => {
-    this._cursor = client._exec(new Cursor(context.text, context.values))
-    return client
+  this._stream.on('end', () => {
+    this._hasEnded = true
+    this._check()
   })
 
-  // ensure cleanup for initialization errors
-  this._client.catch((err) => {
-    debug('_iterator initialization error: %j', err)
-    this._cleanup(err)
+  this._stream.on('error', () => {
+    this._error = err
+    this._check()
   })
 }
 
 inherits(PgIterator, AbstractIterator)
 
 PgIterator._comparators = util.comparators
-
-PgIterator.prototype._windowSize = 100
 
 PgIterator.prototype._parseOptions = function (options) {
   const context = {}
@@ -88,54 +87,26 @@ PgIterator._parseRange = function (db, range, context) {
   return context
 }
 
-PgIterator.prototype._send = function (row, cb) {
-  const db = this.db
-  const key = db._deserializeKey(row.key, this._keyAsBuffer)
-  const value = db._deserializeValue(row.value, this._valueAsBuffer)
-
-  cb(null, key, value)
-}
-
 PgIterator.prototype._next = function (cb) {
   debug_v('# PgIterator _next (cb)')
-
-  this._client.then((client) => {
-    const nextRow = this._rows && this._rows.shift()
-    if (nextRow) return this._send(nextRow, cb)
-
-    this._cursor.read(this._windowSize, (err, rows) => {
-      if (err) return cb(err)
-
-      this._rows = rows
-      const firstRow = rows.shift()
-      firstRow ? this._send(firstRow, cb) : cb()
-    })
-  })
-  .catch((err) => this._cleanup(err, cb))
+  this._cb = cb
+  this._check()
 }
 
-PgIterator.prototype._end = function (cb) {
-  debug_v('# PgIterator _end (cb)')
+PgIterator.prototype._check = function (cb) {
+  if (this._error) return setImmediate(this._cb, this._error)
 
-  this._cleanup(null, cb)
-}
+  if (this._hasEnded) return setImmediate(() => this._cb())
 
-PgIterator.prototype._cleanup = function (err, cb) {
-  const result = this._client.then((client) => {
-    if (this._finalized) {
-      client.release(err)
-    } else {
-      this._finalized = true
-      this._cursor.close(() => {
-        debug_v('_iterator: cursor closed')
-        client.release(err)
-      })
-    }
+  var row = this._stream.read()
 
-    if (cb) err ? cb(err) : cb()
-  })
+  if (row != null) {
+    const key = this.db._deserializeKey(row.key, this._keyAsBuffer)
+    const value = this.db._deserializeValue(row.value, this._valueAsBuffer)
+    return setImmediate(this._cb, null, key, value)
+  }
 
-  if (cb) result.catch(cb)
+  this._stream.once('readable', () => { this._check() })
 }
 
 module.exports = PgIterator

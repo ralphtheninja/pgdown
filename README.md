@@ -26,5 +26,10 @@ db.put('foo', { bar: 'baz' }, (err) => {
 })
 ```
 
+## Config
+
+Database config can be specified as a `postgres://` uri in the `location` string passed to the `PgDOWN` factory function. Otherwise, it will be pulled from the `PG*` environment variables (TODO: document this), falling back to the defaults in the `pg` client lib.
+
+
 ## License
 MIT

@@ -3,6 +3,9 @@
 const AbstractLevelDOWN = require('abstract-leveldown/abstract-leveldown')
 const mts = require('monotonic-timestamp')
 const pg = require('pg')
+const Postgres = require('any-db-postgres')
+const ConnectionPool = require('any-db-pool')
+const transaction = require('any-db-transaction')
 const errors = require('level-errors')
 
 const util = exports
@@ -35,44 +38,40 @@ util.comparators = {
 util.NotFoundError = errors.NotFoundError
 
 util.createPool = function (config) {
-  // create a unique id to keep from pissing in the connection pool on close
-  config.__id = mts()
-  return pg.pools.getOrCreate(config)
+  return new ConnectionPool(Postgres, config, util.POOL_CONFIG)
 }
 
-util.destroyPool = function (pool, cb) {
-  // remove from pg pools
-  if (!pool) return process.nextTick(cb)
-
-  delete pg.pools.all[pool.getName()]
-
-  pool.emit('destroy', new Error('pool destroyed'))
-
-  // TODO: timeout to handle drain hangs?
-  pool.drain(() => {
-    pool.destroyAllNow(cb)
-  })
+util.createTransaction = function (conn) {
+  return transaction(conn)
 }
 
-util.destroyAll = function (cb) {
-  process.nextTick(() => {
-    pg.end()
-    cb()
-  })
-}
-
-// set up pg defaults
+// set up pg connection defaults with standard PG* env var overrides
 const PG_DEFAULTS = util.PG_DEFAULTS = {}
-for (var key in pg.defaults) {
-  PG_DEFAULTS[key] = pg.defaults[key]
+
+PG_DEFAULTS.database = process.env.PGDATABASE || PG_DEFAULTS.database || 'postgres'
+PG_DEFAULTS.host = process.env.PGHOSTADDR || PG_DEFAULTS.host || pg.defaults.host
+PG_DEFAULTS.port = Number(process.env.PGPORT) || PG_DEFAULTS.port || pg.defaults.port
+PG_DEFAULTS.user = process.env.PGUSER || PG_DEFAULTS.user || pg.defaults.user
+PG_DEFAULTS.password = process.env.PGPASSWORD || PG_DEFAULTS.password || pg.defaults.password
+
+// pool config:
+//   min: Number?,
+//   max: Number?,
+//   idleTimeout: Number?,
+//   reapInterval: Number?,
+//   refreshIdle: Boolean?,
+//   onConnect: (Connection, ready: Continuation<Connection>) => void
+//   reset: (Connection, done: Continuation<void>) => void
+//   shouldDestroyConnection: (error: Error) => Boolean
+
+util.POOL_CONFIG = {
+  min: 2,
+  max: 20,
+  reset: function (conn, done) {
+    conn.query('ROLLBACK', done)
+  }
 }
 
-// allow standard pg env vars to override some defaults
-PG_DEFAULTS.database = process.env.PGDATABASE || PG_DEFAULTS.database || 'postgres'
-PG_DEFAULTS.user = process.env.PGUSER || PG_DEFAULTS.user
-PG_DEFAULTS.password = process.env.PGPASSWORD || PG_DEFAULTS.password
-PG_DEFAULTS.host = process.env.PGHOSTADDR || PG_DEFAULTS.host
-PG_DEFAULTS.port = Number(process.env.PGPORT) || PG_DEFAULTS.port
 
 util.parseConfig = function (location) {
   const config = {}
@@ -106,60 +105,10 @@ util.parseConfig = function (location) {
   return config
 }
 
-util.PG_ERRORS = {
-  drop_failure_non_existent: '42P01',
-  duplicate_database: '42P04',
-  invalid_catalog_name: '3D000'
-  // ...
-}
-
-util.connect = function (db) {
-  return new Promise((resolve, reject) => {
-    pg.connect(db._config, (err, client, done) => {
-      if (err) return reject(err)
-
-      // add creation timestamp to client
-      client.__id = mts()
-
-      // create a slightly better client query method
-      client._exec = function (command, params, cb) {
-        if (typeof params === 'function') {
-          cb = params
-          params = null
-        }
-
-        // console.warn('COMMAND:', command.text || command)
-        const result = client.query(command, params)
-
-        if (cb) {
-          const rows = []
-          result.on('error', cb)
-          .on('row', (row) => rows.push(row))
-          .on('end', () => cb(null, rows))
-        }
-
-        return result
-      }
-
-      // add connection pool helper
-      client.release = (err) => {
-        client.release = () => {}
-        done(err)
-      }
-      resolve(client)
-    })
-  })
-}
-
 // TODO: create/drop database, e.g.:
 // https://github.com/olalonde/pgtools/blob/master/index.js
 
 util.dropTable = function (db, cb) {
-  util.connect(db).then((client) => {
-    client._exec(`DROP TABLE IF EXISTS ${db._qname}`, (err) => {
-      client.release(err)
-      cb(err || null)
-    })
-  })
-  .catch((err) => cb(err))
+  const conn = Postgres.createConnection(db._config)
+  conn.query(`DROP TABLE IF EXISTS ${db._qname}`, (err) => cb(err || null))
 }

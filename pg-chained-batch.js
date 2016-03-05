@@ -11,86 +11,37 @@ function PgChainedBatch (db) {
 
   AbstractChainedBatch.call(this, db)
 
-  this._client = this._begin()
+  db._pool.once('close', () => {
+    this._tx.rollback((err) => console.error)
+  })
+
+  // this._tx = util.createTransaction(db._pool, { autoRollback: false })
+  // this._ctx = util.createTransaction(this._ctx)
+
+  this._tx = util.createTransaction(db._pool)
 }
 
 inherits(PgChainedBatch, AbstractChainedBatch)
 
-PgChainedBatch.prototype._begin = function () {
-  const client = util.connect(this._db).then((client) => {
-    this._db._pool.on('destroy', () => {
-      client._exec('ROLLBACK', (err) => client.release(err))
-    })
-
-    client._exec('BEGIN', (err) => {
-      if (err || !this.error) this.error = err
-    })
-    return client
-  })
-
-  // ensure cleanup for initialization errors
-  client.catch((err) => {
-    debug('batch initialization error %j', err)
-    this._cleanup(err)
-  })
-
-  return client
-}
-
 PgChainedBatch.prototype._put = function (key, value) {
   debug_v('# PgChainedBatch _put (key = %j, value = %j)', key, value)
-
-  const statement = this._db._prepareStatement('_put', [ key, value ])
-  this._client.then((client) => {
-    client._exec(statement.text, statement.values, (err) => {
-      this._error = this._error || err
-    })
-  })
-  .catch((err) => this._cleanup(err))
+  this._tx.query(this._db._sql_put, [ key, value ])
 }
 
 PgChainedBatch.prototype._del = function (key) {
   debug_v('# PgChainedBatch _del (key = %j)', key)
-
-  const statement = this._db._prepareStatement('_del', [ key ])
-  this._client.then((client) => {
-    client._exec(statement.text, statement.values, (err) => {
-      this._error = this._error || err
-    })
-  })
-  .catch((err) => this._cleanup(err))
+  this._tx.query(this._db._sql_del, [ key ])
 }
 
 PgChainedBatch.prototype._clear = function () {
   debug('# PgChainedBatch _clear ()')
-
-  this._client.then((client) => {
-    // abort existing transaction and start a fresh one
-    client._exec('ROLLBACK; BEGIN', (err) => {
-      this._error = this._error || err
-    })
-  })
-  .catch((err) => this._cleanup(err))
+  // TODO: use autoRollback false on top level tx context
+  // then roll back child tx and start fresh
 }
 
 PgChainedBatch.prototype._write = function (cb) {
   debug('# PgChainedBatch _write (cb)')
-
-  this._client.then((client) => {
-    const action = this._error ? 'ROLLBACK' : 'COMMIT'
-    client._exec(action, (err) => this._cleanup(err, cb))
-  })
-  .catch((err) => this._cleanup(err, cb))
-}
-
-PgChainedBatch.prototype._cleanup = function (err, cb) {
-  this._client.then((client) => {
-    client.release(this._error || err)
-    if (cb) cb(this._error || err || null)
-  })
-  .catch(cb || ((err) => {
-    if (!this._error) this._error = err
-  }))
+  this._tx.commit((err) => cb(err || null))
 }
 
 module.exports = PgChainedBatch

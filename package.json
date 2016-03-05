@@ -19,10 +19,14 @@
   "homepage": "https://github.com/ralphtheninja/pgdown#readme",
   "dependencies": {
     "abstract-leveldown": "deanlandolt/abstract-leveldown#pgdown",
+    "any-db-pool": "^2.1.0",
+    "any-db-postgres": "^2.1.4",
+    "any-db-transaction": "^2.2.2",
     "debug": "^2.2.0",
     "inherits": "^2.0.1",
     "level-errors": "^1.0.4",
     "monotonic-timestamp": "0.0.9",
+    "parse-db-url": "0.0.0",
     "pg": "^4.5.1",
     "pg-cursor": "^1.0.0"
   },
