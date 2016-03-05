@@ -15,8 +15,8 @@ function PgChainedBatch (db) {
     this._tx.rollback((err) => console.error)
   })
 
-  // this._tx = util.createTransaction(db._pool, { autoRollback: false })
-  // this._ctx = util.createTransaction(this._ctx)
+  // this._txWrap = util.createTransaction(db._pool, { autoRollback: false })
+  // this._tx = util.createTransaction(this._ctx)
 
   this._tx = util.createTransaction(db._pool)
 }

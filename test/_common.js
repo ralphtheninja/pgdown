@@ -5,7 +5,7 @@ const util = require('../util')
 const PgDOWN = require('../')
 
 util.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
-util.PG_DEFAULTS.poolIdleTimeout = 2000
+util.PG_DEFAULTS.idleTimeout = 2000
 
 const common = exports
 

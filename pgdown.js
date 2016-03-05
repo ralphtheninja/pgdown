@@ -33,27 +33,29 @@ function PgDOWN (location) {
 
 inherits(PgDOWN, AbstractLevelDOWN)
 
-PgDOWN.prototype._serializeKey = function (key) {
+const proto = PgDOWN.prototype
+
+proto._serializeKey = function (key) {
   debug_v('## _serializeKey (key = %j)', key)
   return util.serialize(key)
 }
 
-PgDOWN.prototype._serializeValue = function (value) {
+proto._serializeValue = function (value) {
   debug_v('## _serializeValue (value = %j)', value)
   return util.serialize(value)
 }
 
-PgDOWN.prototype._deserializeKey = function (key, asBuffer) {
+proto._deserializeKey = function (key, asBuffer) {
   debug_v('## _deserializeKey (key = %j, asBuffer = %j)', key)
   return util.deserialize(key, asBuffer)
 }
 
-PgDOWN.prototype._deserializeValue = function (value, asBuffer) {
+proto._deserializeValue = function (value, asBuffer) {
   debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
   return util.deserialize(value, asBuffer)
 }
 
-PgDOWN.prototype._open = function (options, cb) {
+proto._open = function (options, cb) {
   debug('## _open (options = %j, cb)', options)
 
   this._pool = util.createPool(this._config)
@@ -104,12 +106,12 @@ PgDOWN.prototype._open = function (options, cb) {
   })
 }
 
-PgDOWN.prototype._close = function (cb) {
+proto._close = function (cb) {
   debug('## _close (cb)')
   this._pool.close(cb)
 }
 
-PgDOWN.prototype._get = function (key, options, cb) {
+proto._get = function (key, options, cb) {
   debug('## _get (key = %j, options = %j, cb)', key, options)
 
   this._pool.query(this._sql_get, [ key ], (err, result) => {
@@ -127,17 +129,17 @@ PgDOWN.prototype._get = function (key, options, cb) {
   })
 }
 
-PgDOWN.prototype._put = function (key, value, options, cb) {
+proto._put = function (key, value, options, cb) {
   debug('## _put (key = %j, value = %j, options = %j, cb)', key, value, options)
   this._pool.query(this._sql_put, [ key, value ], (err) => cb(err || null))
 }
 
-PgDOWN.prototype._del = function (key, options, cb) {
+proto._del = function (key, options, cb) {
   debug('## _del (key = %j, options = %j, cb)', key, options)
   this._pool.query(this._sql_del, [ key ], (err) => cb(err || null))
 }
 
-PgDOWN.prototype._batch = function (ops, options, cb) {
+proto._batch = function (ops, options, cb) {
   const tx = util.createTransaction(this._pool)
 
   ops.forEach((op) => {
@@ -154,20 +156,20 @@ PgDOWN.prototype._batch = function (ops, options, cb) {
   tx.commit((err) => cb(err || null))
 }
 
-PgDOWN.prototype._chainedBatch = function () {
+proto._chainedBatch = function () {
   debug('## _chainedBatch ()')
   return new PgChainedBatch(this)
 }
 
-PgDOWN.prototype._iterator = function (options) {
+proto._iterator = function (options) {
   debug('## _iterator (options = %j)', options)
   return new PgIterator(this, options)
 }
 
-PgDOWN.prototype._approximateSize = function (start, end, cb) {
+proto._approximateSize = function (start, end, cb) {
   const options = { start: start, end: end }
   // generate standard iterator sql and replace head clause
-  const context = PgIterator._parseRange(this, options)
+  const context = PgIterator._parseOptions(this, options)
 
   const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${this._qname} as tbl`
   context.clauses.unshift(head)

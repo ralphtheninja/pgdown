@@ -13,58 +13,45 @@ function PgIterator (db, options) {
 
   this._keyAsBuffer = options.keyAsBuffer
   this._valueAsBuffer = options.valueAsBuffer
-  this._hasEnded = false
-  this._error = null
 
-  const context = this._parseOptions(options)
-  this._stream = db._pool.query(context.text, context.values)
+  const statement = PgIterator._parseOptions(db, options)
+  const head = `SELECT key::bytea, value::bytea FROM ${db._qname}`
+  statement.clauses.unshift(head)
+  statement.text = statement.clauses.join(' ')
 
-  this._stream.on('end', () => {
-    this._hasEnded = true
-    this._check()
-  })
-
-  this._stream.on('error', () => {
-    this._error = err
-    this._check()
-  })
+  this._cursor = util.createCursor(db, statement)
 }
 
 inherits(PgIterator, AbstractIterator)
 
 PgIterator._comparators = util.comparators
 
-PgIterator.prototype._parseOptions = function (options) {
+PgIterator._parseOptions = function (db, options) {
   const context = {}
-  const clauses = context.clauses = []
-  const values = context.values = []
+  const clauses = context.clauses = context.clauses || []
+  const values = context.values = context.values || []
+  PgIterator._parseRange(db, options, context)
 
-  clauses.push(`SELECT key::bytea, value::bytea FROM ${this.db._qname}`)
-
-  PgIterator._parseRange(this.db, options, context)
-
-  clauses.push('ORDER BY key ' + (options.reverse ? 'DESC' : 'ASC'))
-
-  const limit = options.limit
-  if (limit >= 0) {
-    values.push(limit)
-    clauses.push('LIMIT $' + values.length)
+  if (options.reverse != null) {
+    context.clauses.push('ORDER BY key ' + (options.reverse ? 'DESC' : 'ASC'))
   }
 
-  // TODO: any reason not to add this?
-  // if (options.offset > 0) {
-  //   values.push(options.offset)
-  //   clauses.push('OFFSET $' + values.length)
-  // }
+  if (options.limit != null && options.limit >= 0) {
+    context.values.push(options.limit)
+    context.clauses.push('LIMIT $' + values.length)
+  }
 
-  context.text = context.clauses.join(' ')
+  if (options.offset > 0) {
+    context.values.push(options.offset)
+    context.clauses.push('OFFSET $' + values.length)
+  }
+
   return context
 }
 
 PgIterator._parseRange = function (db, range, context) {
-  context = context || {}
-  const clauses = context.clauses = context.clauses || []
-  const values = context.values = context.values || []
+  const clauses = context.clauses
+  const values = context.values
 
   clauses.push('WHERE')
 
@@ -87,26 +74,35 @@ PgIterator._parseRange = function (db, range, context) {
   return context
 }
 
+PgIterator.prototype._batchSize = 100
+
 PgIterator.prototype._next = function (cb) {
   debug_v('# PgIterator _next (cb)')
-  this._cb = cb
-  this._check()
+
+  const nextRow = this._rows && this._rows.shift()
+  if (nextRow) return this._send(nextRow, cb)
+
+  this._cursor.read(this._batchSize, (err, rows) => {
+    if (err) return cb(err)
+
+    this._rows = rows
+    this._send(rows.shift(), cb)
+  })
 }
 
-PgIterator.prototype._check = function (cb) {
-  if (this._error) return setImmediate(this._cb, this._error)
+PgIterator.prototype._end = function (cb) {
+  debug_v('# PgIterator _end (cb)')
+  this._cursor.close(cb)
+}
 
-  if (this._hasEnded) return setImmediate(() => this._cb())
+PgIterator.prototype._send = function (row, cb) {
+  if (!row) return process.nextTick(cb)
 
-  var row = this._stream.read()
+  const db = this.db
+  const key = db._deserializeKey(row.key, this._keyAsBuffer)
+  const value = db._deserializeValue(row.value, this._valueAsBuffer)
 
-  if (row != null) {
-    const key = this.db._deserializeKey(row.key, this._keyAsBuffer)
-    const value = this.db._deserializeValue(row.value, this._valueAsBuffer)
-    return setImmediate(this._cb, null, key, value)
-  }
-
-  this._stream.once('readable', () => { this._check() })
+  cb(null, key, value)
 }
 
 module.exports = PgIterator

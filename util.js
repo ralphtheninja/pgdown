@@ -3,6 +3,7 @@
 const AbstractLevelDOWN = require('abstract-leveldown/abstract-leveldown')
 const mts = require('monotonic-timestamp')
 const pg = require('pg')
+const Cursor = require('pg-cursor')
 const Postgres = require('any-db-postgres')
 const ConnectionPool = require('any-db-pool')
 const transaction = require('any-db-transaction')
@@ -41,18 +42,33 @@ util.createPool = function (config) {
   return new ConnectionPool(Postgres, config, util.POOL_CONFIG)
 }
 
-util.createTransaction = function (conn) {
-  return transaction(conn)
+util.createTransaction = function (connection) {
+  return transaction(connection)
+}
+
+util.createCursor = function (db, statement) {
+  const pool = db._pool
+  const connection = Postgres.createConnection(db._config)
+  const cursor = connection.query(new Cursor(statement.text, statement.values))
+  cursor.close = (cb) => {
+    connection.removeAllListeners()
+    connection.on('error', function () {})
+    connection.end()
+    process.nextTick(cb)
+  }
+  return cursor
 }
 
 // set up pg connection defaults with standard PG* env var overrides
 const PG_DEFAULTS = util.PG_DEFAULTS = {}
 
-PG_DEFAULTS.database = process.env.PGDATABASE || PG_DEFAULTS.database || 'postgres'
-PG_DEFAULTS.host = process.env.PGHOSTADDR || PG_DEFAULTS.host || pg.defaults.host
-PG_DEFAULTS.port = Number(process.env.PGPORT) || PG_DEFAULTS.port || pg.defaults.port
-PG_DEFAULTS.user = process.env.PGUSER || PG_DEFAULTS.user || pg.defaults.user
-PG_DEFAULTS.password = process.env.PGPASSWORD || PG_DEFAULTS.password || pg.defaults.password
+PG_DEFAULTS.database = process.env.PGDATABASE || 'postgres'
+PG_DEFAULTS.host = process.env.PGHOSTADDR || pg.defaults.host
+PG_DEFAULTS.port = Number(process.env.PGPORT) || pg.defaults.port
+PG_DEFAULTS.user = process.env.PGUSER || pg.defaults.user
+PG_DEFAULTS.password = process.env.PGPASSWORD || pg.defaults.password
+PG_DEFAULTS.idleTimeout = pg.defaults.idleTimeoutMillis
+PG_DEFAULTS.reapInterval = pg.defaults.reapIntervalMillis
 
 // pool config:
 //   min: Number?,
