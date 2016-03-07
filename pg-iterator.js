@@ -15,7 +15,7 @@ function PgIterator (db, options) {
   this._valueAsBuffer = options.valueAsBuffer
 
   const statement = PgIterator._parseOptions(db, options)
-  const head = `SELECT key::bytea, value::bytea FROM ${db._qname}`
+  const head = `SELECT key::bytea, value::bytea FROM ${db._rel}`
   statement.clauses.unshift(head)
   statement.text = statement.clauses.join(' ')
 
@@ -33,17 +33,17 @@ PgIterator._parseOptions = function (db, options) {
   PgIterator._parseRange(db, options, context)
 
   if (options.reverse != null) {
-    context.clauses.push('ORDER BY key ' + (options.reverse ? 'DESC' : 'ASC'))
+    clauses.push('ORDER BY key ' + (options.reverse ? 'DESC' : 'ASC'))
   }
 
   if (options.limit != null && options.limit >= 0) {
-    context.values.push(options.limit)
-    context.clauses.push('LIMIT $' + values.length)
+    values.push(options.limit)
+    clauses.push('LIMIT $' + values.length)
   }
 
   if (options.offset > 0) {
-    context.values.push(options.offset)
-    context.clauses.push('OFFSET $' + values.length)
+    values.push(options.offset)
+    clauses.push('OFFSET $' + values.length)
   }
 
   return context

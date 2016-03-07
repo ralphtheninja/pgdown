@@ -39,6 +39,7 @@ util.comparators = {
 util.NotFoundError = errors.NotFoundError
 
 util.createPool = function (config) {
+  config.__id = mts()
   return new ConnectionPool(Postgres, config, util.POOL_CONFIG)
 }
 
@@ -47,14 +48,29 @@ util.createTransaction = function (connection) {
 }
 
 util.createCursor = function (db, statement) {
-  const pool = db._pool
-  const connection = Postgres.createConnection(db._config)
-  const cursor = connection.query(new Cursor(statement.text, statement.values))
+  const client = Postgres.createConnection(db._config)
+  const cursor = client.query(new Cursor(statement.text, statement.values))
+  client.on('error', (err) => {
+    console.warn('GOT CURSOR ERR:', err)
+    client.close()
+  })
+
   cursor.close = (cb) => {
-    connection.removeAllListeners()
-    connection.on('error', function () {})
-    connection.end()
-    process.nextTick(cb)
+    // NB: dirty hack to test the pool hanging issues... not working anyway...
+    if (cursor.connection) {
+      cursor.connection.close({type: 'P'})
+      cursor.connection.sync()
+      cursor.state = 'done'
+      cursor.connection.once('closeComplete', () => {
+        client.end()
+        client.removeAllListeners()
+        cb && cb()
+      })
+    } else {
+      client.end()
+      client.removeAllListeners()
+      cb && process.nextTick(cb)
+    }
   }
   return cursor
 }
@@ -88,7 +104,6 @@ util.POOL_CONFIG = {
   }
 }
 
-
 util.parseConfig = function (location) {
   const config = {}
 
@@ -112,11 +127,11 @@ util.parseConfig = function (location) {
 
   // NB: this will eventually allow us to support subleveling natively
   // TODO: use extra path parts for schema name
-  if (parts.length) throw new Error('schema paths NYI')
+  if (parts.length) throw new Error('sublevel paths NYI')
 
   // remaining components represent schema namespace
   // TODO: surface default `public` schema in opts?
-  // config._schema = parts.length ? parts.join('__') : 'public'
+  // config._path = parts.length ? parts.join('__') : null
 
   return config
 }
@@ -125,6 +140,19 @@ util.parseConfig = function (location) {
 // https://github.com/olalonde/pgtools/blob/master/index.js
 
 util.dropTable = function (db, cb) {
-  const conn = Postgres.createConnection(db._config)
-  conn.query(`DROP TABLE IF EXISTS ${db._qname}`, (err) => cb(err || null))
+  const client = Postgres.createConnection(db._config)
+  client.on('error', (err) => util.destroyClient(err, client, cb))
+  client.query(`DROP TABLE IF EXISTS ${db._rel}`, () => util.destroyClient(null, client, cb))
+}
+
+util.destroyClient = function (err, client, cb) {
+  client && client.end()
+  cb(err || null)
+}
+
+util.destroyAll = function (cb) {
+  process.nextTick(() => {
+    pg.end()
+    cb()
+  })
 }

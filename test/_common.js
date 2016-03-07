@@ -1,6 +1,5 @@
 'use strict'
 
-const after = require('after')
 const util = require('../util')
 const PgDOWN = require('../')
 
@@ -19,24 +18,11 @@ common.lastLocation = () => _last
 common.location = (loc) => (_last = loc || (common.PREFIX + (++_count)))
 
 common.cleanup = (cb) => {
-  const len = OPENED.length
-  const done = after(len, cb)
-
-  for (var i = 0; i < len; i++) {
-    const db = OPENED[i]
-    const pool = db && db._pool
-    if (pool) pool.close(done)
-    else done()
-  }
-
-  OPENED.length = 0
+  util.destroyAll(cb)
 }
 
 common.setUp = (t) => {
-  common.cleanup((err) => {
-    t.error(err, 'cleanup returned an error')
-    t.end()
-  })
+  common.cleanup(t.end)
 }
 
 common.tearDown = (t) => {

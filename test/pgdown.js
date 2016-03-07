@@ -10,9 +10,8 @@ test('constructor', (t) => {
     const db = PgDOWN(common.location())
     const config = db._config
     t.equal(config.database, util.PG_DEFAULTS.database, 'uses default database')
-    t.equal(config._table.indexOf(common.PREFIX), 0, 'table name uses test prefix')
-    t.ok(db._qname.indexOf(config._table) >= 0, 'qualified name includes table name')
-    t.equal(config._schema, undefined, 'no schema')
+    t.equal(db._table.indexOf(common.PREFIX), 0, 'table name uses test prefix')
+    t.ok(db._rel.indexOf(config._table) >= 0, 'qualified name includes table name')
     t.end()
   })
 })
@@ -24,7 +23,7 @@ test('open', (t) => {
     t.end()
   })
 
-  t.skip('invalid db name', (t) => {
+  t.test('invalid db name', (t) => {
     const database = 'pg_invalid_db__'
     const loc = common.location('/' + database + '/' + common.PREFIX)
     const db = PgDOWN(loc)
@@ -52,9 +51,9 @@ test('open', (t) => {
     const loc = common.location()
     const opts = { createIfMissing: false }
 
-    const db = PgDOWN(loc)
-    db.open(opts, (err) => {
-      t.equal(db.location, loc, 'location set')
+    const db1 = PgDOWN(loc)
+    db1.open(opts, (err) => {
+      t.equal(db1.location, loc, 'location set')
       t.ok(err, 'error on open')
 
       const db2 = PgDOWN(loc)
@@ -62,8 +61,12 @@ test('open', (t) => {
         t.equal(db2.location, loc, 'location set')
         t.ok(err, 'error on open')
 
-        t.end()
+        db2.close(t.end)
       })
     })
+  })
+
+  t.test('end', (t) => {
+    common.tearDown(t)
   })
 })

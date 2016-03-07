@@ -19,16 +19,19 @@ function PgDOWN (location) {
   this._config = util.parseConfig(location)
   debug('pg config: %j', this._config)
 
-  // set qualified name
-  const qname = this._qname = util.escapeIdentifier(this._config._table)
-  // TODO: if (schema) qname = schema + '.' + table, escaped
+  this._table = this._config._table
+  const table = util.escapeIdentifier(this._table)
+  const schema = util.escapeIdentifier(this._schema)
 
-  this._sql_insert = `INSERT INTO ${qname} (key,value) VALUES($1,$2)`
-  this._sql_update = `UPDATE ${qname} SET value=($2) WHERE key=($1)`
+  // set relation name using (assuming pgdown as schema name)
+  const rel = this._rel = schema + '.' + table
 
-  this._sql_get = `SELECT value FROM ${qname} WHERE (key)=$1`
+  this._sql_insert = `INSERT INTO ${rel} (key,value) VALUES($1,$2)`
+  this._sql_update = `UPDATE ${rel} SET value=($2) WHERE key=($1)`
+
+  this._sql_get = `SELECT value FROM ${rel} WHERE (key)=$1`
   this._sql_put = this._sql_insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  this._sql_del = `DELETE FROM ${qname} WHERE (key) = $1`
+  this._sql_del = `DELETE FROM ${rel} WHERE (key) = $1`
 }
 
 inherits(PgDOWN, AbstractLevelDOWN)
@@ -55,55 +58,61 @@ proto._deserializeValue = function (value, asBuffer) {
   return util.deserialize(value, asBuffer)
 }
 
+proto._schema = 'pgdown'
+
 proto._open = function (options, cb) {
   debug('## _open (options = %j, cb)', options)
 
-  this._pool = util.createPool(this._config)
+  const pool = this._pool = util.createPool(this._config)
 
   const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
   const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
-  const qname = this._qname
-  var text = ''
 
-  if (errorIfExists || !createIfMissing) {
-    // TODO: find a cleaner way to do this (e.g. pg_class, pg_namespace tables)
-    text += `
-      SELECT COUNT(*) from ${qname} LIMIT 1;
-    `
+  const table = this._table
+  const schema = this._schema
+  const rel = this._rel
+
+  // always create pgdown schema
+  pool.query(`CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(schema)}`, info)
+
+  function info (err) {
+    if (err) return cb(err)
+
+    pool.query(`
+      SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename=$2
+    `, [ schema, table ], (err, result) => {
+      const exists = result && result.rowCount === 1
+
+      if (errorIfExists && exists) {
+        err = new Error('table exists: ' + table)
+      } else if (!createIfMissing && !exists) {
+        err = new Error('table does not exist')
+      }
+
+      if (err || !createIfMissing) {
+        cb(err || null)
+      } else {
+        create()
+      }
+    })
   }
 
-  // create associated schema along w/ table, if specified
-  // const schema = util.escapeIdentifier(this._config._schema)
-  // if (createIfMissing && schema) {
-  //   text += `
-  //     CREATE SCHEMA ${IF_NOT_EXISTS} ${util.escapeIdentifier(this._schema)};
-  //   `
-  // }
-
-  if (createIfMissing) {
+  function create () {
     // TODO: support for jsonb, bytea using serialize[Key|Value]
     const kType = 'bytea'
     const vType = 'bytea'
-    text += `
-      CREATE TABLE ${IF_NOT_EXISTS} ${qname} (
+    pool.query(`
+      CREATE TABLE ${IF_NOT_EXISTS} ${rel} (
         key ${kType} PRIMARY KEY,
         value ${vType}
       );
-    `
+    `, (err) => {
+      debug('_open: query result %j', err)
+
+      cb(err || null)
+    })
   }
-
-  this._pool.query(text, (err) => {
-    debug('_open: query result %j', err)
-
-    if (err) {
-      cb(err)
-    } else if (errorIfExists && !createIfMissing) {
-      cb(new Error('table exists: ' + qname))
-    } else {
-      cb()
-    }
-  })
 }
 
 proto._close = function (cb) {
@@ -171,7 +180,7 @@ proto._approximateSize = function (start, end, cb) {
   // generate standard iterator sql and replace head clause
   const context = PgIterator._parseOptions(this, options)
 
-  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${this._qname} as tbl`
+  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${this._rel} as tbl`
   context.clauses.unshift(head)
   const text = context.clauses.join(' ')
 
@@ -179,7 +188,6 @@ proto._approximateSize = function (start, end, cb) {
     debug('_approximateSize: query result %j %j', err, result)
     if (err) return cb(err)
 
-    const row = Number(result.rows[0])
     const size = result.rowCount && Number(result.rows[0].size)
     if (result.rowCount === 1 && !isNaN(size)) {
       cb(null, size)
