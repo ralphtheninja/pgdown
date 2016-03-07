@@ -23,7 +23,7 @@ test('open', (t) => {
     t.end()
   })
 
-  t.test('invalid db name', (t) => {
+  t.test('malformed db name', (t) => {
     const database = 'pg_invalid_db__'
     const loc = common.location('/' + database + '/' + common.PREFIX)
     const db = PgDOWN(loc)
@@ -36,6 +36,7 @@ test('open', (t) => {
     })
   })
 
+  // TODO: catch null bytes at query time
   t.skip('malformed table name', (t) => {
     const table = common.location('malformed_\0_table')
     const db = PgDOWN(table)

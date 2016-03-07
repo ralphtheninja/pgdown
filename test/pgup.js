@@ -145,6 +145,32 @@ test('PgUP CRUD: utf8 keyEncoding, json valueEncoding', (t) => {
     })
   })
 
+  t.skip('value with null byte', (t) => {
+    const v = 'i can haz \0 byte?'
+    db.put('nullv', v, (err) => {
+      if (err) return t.end(err)
+
+      db.get('nullv', (err, value) => {
+        if (err) return t.end(err)
+        t.equal(value, v, 'value with null byte')
+        t.end()
+      })
+    })
+  })
+
+  t.skip('key with null byte', (t) => {
+    const v = 'value for key with null byte'
+    db.put('null\0', v, (err) => {
+      if (err) return t.end(err)
+
+      db.get('null\0', (err, value) => {
+        if (err) return t.end(err)
+        t.deepEqual(value, v, 'value for key with null byte')
+        t.end()
+      })
+    })
+  })
+
   t.test('close', (t) => {
     db.close((err) => {
       if (err) return t.end(err)

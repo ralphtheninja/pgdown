@@ -69,14 +69,14 @@ util.createPool = (config) => {
   config.name = mts()
   const pool = new ConnectionPool(Postgres, config, util.POOL_CONFIG)
 
-  // pool.__clients = []
-
   // const _query = pool.query
   // pool.query = function (text) {
-  //   // console.warn('SQL:', text)
-  //   return _query.apply(this, arguments)
+  //   console.warn('SQL:', text)
+  //   const query = _query.apply(this, arguments)
+  //   return query
   // }
 
+  // pool.__clients = []
   // pool.on('acquire', (client) => {
   //   pool.__clients.push(client)
   // })
