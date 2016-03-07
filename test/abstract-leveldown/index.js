@@ -23,7 +23,6 @@ const suites = {
   approximateSize: require('./approximate-size-test').all
 }
 
-
 Object.keys(suites).forEach((name) => {
   suites[name](PgDOWN, test, common, buffer)
 })

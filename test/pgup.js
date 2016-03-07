@@ -2,7 +2,6 @@
 
 const after = require('after')
 const test = require('tape')
-const PgDOWN = require('../')
 const util = require('../util')
 const common = require('./common')
 const PgUP = common.level
