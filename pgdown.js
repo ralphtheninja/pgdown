@@ -5,7 +5,7 @@ const AbstractLevelDOWN = require('abstract-leveldown/abstract-leveldown')
 const util = require('./util')
 const PgIterator = require('./pg-iterator')
 const PgChainedBatch = require('./pg-chained-batch')
-const debug = require('debug')('pgdown')
+const debug = require('debug')('pgdown:info')
 const debug_v = require('debug')('pgdown:verbose')
 
 module.exports = PgDOWN
@@ -41,25 +41,29 @@ const proto = PgDOWN.prototype
 
 proto._serializeKey = function (key) {
   debug_v('## _serializeKey (key = %j)', key)
-  return util.serialize(key)
+  return util.serialize(this._keyDataType, key)
 }
 
 proto._serializeValue = function (value) {
   debug_v('## _serializeValue (value = %j)', value)
-  return util.serialize(value)
+  return util.serialize(this._valueDataType, value)
 }
 
 proto._deserializeKey = function (key, asBuffer) {
   debug_v('## _deserializeKey (key = %j, asBuffer = %j)', key)
-  return util.deserialize(key, asBuffer)
+  return util.deserialize(this._keyDataType, key, asBuffer)
 }
 
 proto._deserializeValue = function (value, asBuffer) {
   debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
-  return util.deserialize(value, asBuffer)
+  return util.deserialize(this._valueDataType, value, asBuffer)
 }
 
 proto._schema = 'pgdown'
+
+proto._keyDataType = 'bytea'
+
+proto._valueDataType = 'bytea'
 
 proto._open = function (options, cb) {
   debug('## _open (options = %j, cb)', options)
@@ -73,6 +77,23 @@ proto._open = function (options, cb) {
   const table = this._table
   const schema = this._schema
   const rel = this._rel
+
+  // TODO: move to helper methods
+  const kEnc = options.keyEncoding
+  if (kEnc === 'utf8') {
+    this._keyDataType = 'text'
+  } else if (kEnc === 'json') {
+    this._keyDataType = 'jsonb'
+  }
+
+  const vEnc = options.valueEncoding
+  if (vEnc === 'utf8') {
+    this._valueDataType = 'text'
+  } else if (vEnc === 'json') {
+    this._valueDataType = 'jsonb'
+  }
+
+  debug('column types: key %j, value %j', this._keyDataType, this._valueDataType)
 
   // always create pgdown schema
   pool.query(`
@@ -103,13 +124,11 @@ proto._open = function (options, cb) {
 
   const create = () => {
     // TODO: support for jsonb, bytea using serialize[Key|Value]
-    const kType = 'bytea'
-    const vType = 'bytea'
     pool.query(`
       CREATE TABLE ${IF_NOT_EXISTS} ${rel} (
-        key ${kType} PRIMARY KEY,
-        value ${vType}
-      );
+        key ${this._keyDataType} PRIMARY KEY,
+        value ${this._valueDataType}
+      )
     `, (err) => {
       debug('_open: query result %j', err)
 

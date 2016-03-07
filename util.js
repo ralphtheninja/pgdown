@@ -15,12 +15,39 @@ util.escapeIdentifier = pg.Client.prototype.escapeIdentifier
 
 util.isBuffer = AbstractLevelDOWN.prototype._isBuffer
 
-util.serialize = function (source) {
-  return util.isBuffer(source) ? source : source == null ? '' : String(source)
+util.serialize = function (type, source) {
+  const isBuffer = util.isBuffer(source)
+
+  if (type === 'bytea') {
+    return isBuffer ? source : source == null ? '' : String(source)
+  }
+
+  if (type === 'text') {
+    return isBuffer ? source.toString('utf8') : source == null ? '' : String(source)
+  }
+
+  if (type === 'jsonb' || type === 'json') {
+    return JSON.parse(isBuffer ? source.toString('utf8') : source)
+  }
+
+  throw new Error('cannot serialize unknown data type:' + type)
 }
 
-util.deserialize = function (source, asBuffer) {
-  return asBuffer ? source : String(source || '')
+util.deserialize = function (type, source, asBuffer) {
+  if (type === 'bytea') {
+    return asBuffer ? source : String(source || '')
+  }
+
+  if (type === 'text') {
+    return asBuffer ? source.toString('utf8') : source == null ? '' : String(source)
+  }
+
+  if (type === 'jsonb' || type === 'json') {
+    // TODO: id encoding to use as a pass through?
+    return JSON.stringify(asBuffer ? source.toString('utf8') : source)
+  }
+
+  throw new Error('cannot deserialize unknown data type:' + type)
 }
 
 util.comparators = {

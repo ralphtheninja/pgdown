@@ -3,7 +3,7 @@
 const inherits = require('inherits')
 const AbstractIterator = require('abstract-leveldown/abstract-iterator')
 const util = require('./util')
-const debug = require('debug')('pgdown')
+const debug = require('debug')('pgdown:info')
 const debug_v = require('debug')('pgdown:verbose')
 
 module.exports = PgIterator
@@ -18,7 +18,10 @@ function PgIterator (db, options) {
   this._valueAsBuffer = options.valueAsBuffer
 
   const statement = PgIterator._parseOptions(db, options)
-  const head = `SELECT key::bytea, value::bytea FROM ${db._rel}`
+  const head = `
+    SELECT key::${db._keyDataType}, value::${db._valueDataType} FROM ${db._rel}
+  `
+
   statement.clauses.unshift(head)
   statement.text = statement.clauses.join(' ')
 

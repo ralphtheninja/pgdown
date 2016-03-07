@@ -36,7 +36,13 @@ test('crud', (t) => {
   })
 
   t.test('open', (t) => {
-    db.open(t.end)
+    db.open((err) => {
+      if (err) return t.end(err)
+
+      t.equal(db.db._keyDataType, 'text', 'text from utf8 keyEncoding')
+      t.equal(db.db._valueDataType, 'jsonb', 'jsonb from json valueEncoding')
+      t.end()
+    })
   })
 
   t.test('put', (t) => {

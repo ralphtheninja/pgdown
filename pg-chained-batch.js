@@ -3,7 +3,7 @@
 const inherits = require('inherits')
 const AbstractChainedBatch = require('abstract-leveldown/abstract-chained-batch')
 const util = require('./util')
-const debug = require('debug')('pgdown')
+const debug = require('debug')('pgdown:info')
 // const debug_v = require('debug')('pgdown:verbose')
 
 module.exports = PgChainedBatch
