@@ -3,7 +3,7 @@ require('./pgdown-json')
 require('./abstract-leveldown')
 
 // TODO: figure out WTF is up w/ the shitty `pg` pooling
-require('tape').test('exit', (t) => {
-  t.end()
-  setTimeout(process.exit, 1000)
+require('tape').onFinish(function () {
+  console.warn('failing:', this.fail)
+  setTimeout(() => process.exit(this.fail ? 1 : 0))
 })

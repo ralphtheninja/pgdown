@@ -6,6 +6,9 @@ const util = require('./util')
 const debug = require('debug')('pgdown')
 const debug_v = require('debug')('pgdown:verbose')
 
+module.exports = PgIterator
+
+inherits(PgIterator, AbstractIterator)
 function PgIterator (db, options) {
   debug('# new PgIterator (db, options = %j)', options)
 
@@ -21,8 +24,6 @@ function PgIterator (db, options) {
 
   this._cursor = util.createCursor(db, statement)
 }
-
-inherits(PgIterator, AbstractIterator)
 
 PgIterator._comparators = util.comparators
 
@@ -104,5 +105,3 @@ PgIterator.prototype._send = function (row, cb) {
 
   cb(null, key, value)
 }
-
-module.exports = PgIterator

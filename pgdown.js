@@ -8,6 +8,9 @@ const PgChainedBatch = require('./pg-chained-batch')
 const debug = require('debug')('pgdown')
 const debug_v = require('debug')('pgdown:verbose')
 
+module.exports = PgDOWN
+
+inherits(PgDOWN, AbstractLevelDOWN)
 function PgDOWN (location) {
   if (!(this instanceof PgDOWN)) {
     return new PgDOWN(location)
@@ -33,8 +36,6 @@ function PgDOWN (location) {
   this._sql_put = this._sql_insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
   this._sql_del = `DELETE FROM ${rel} WHERE (key) = $1`
 }
-
-inherits(PgDOWN, AbstractLevelDOWN)
 
 const proto = PgDOWN.prototype
 
@@ -117,7 +118,12 @@ proto._open = function (options, cb) {
 
 proto._close = function (cb) {
   debug('## _close (cb)')
-  this._pool.close(cb)
+  if (this._pool) {
+    util.destroyPool(this._pool, cb)
+    this._pool = null
+  } else {
+    process.nextTick(cb)
+  }
 }
 
 proto._get = function (key, options, cb) {
@@ -140,12 +146,14 @@ proto._get = function (key, options, cb) {
 
 proto._put = function (key, value, options, cb) {
   debug('## _put (key = %j, value = %j, options = %j, cb)', key, value, options)
-  this._pool.query(this._sql_put, [ key, value ], (err) => cb(err || null))
+  const batch = [{ type: 'put', key: key, value: value }]
+  this._batch(batch, options, (err) => cb(err || null))
 }
 
 proto._del = function (key, options, cb) {
   debug('## _del (key = %j, options = %j, cb)', key, options)
-  this._pool.query(this._sql_del, [ key ], (err) => cb(err || null))
+  const batch = [{ type: 'del', key: key }]
+  this._batch(batch, options, (err) => cb(err || null))
 }
 
 proto._batch = function (ops, options, cb) {
@@ -196,5 +204,3 @@ proto._approximateSize = function (start, end, cb) {
     }
   })
 }
-
-module.exports = PgDOWN

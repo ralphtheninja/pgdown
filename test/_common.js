@@ -22,6 +22,7 @@ common.cleanup = (cb) => {
 }
 
 common.setUp = (t) => {
+  t.timeoutAfter(2000)
   common.cleanup(t.end)
 }
 
@@ -56,7 +57,6 @@ common.checkBatchSize = function (batch, size) {
 
 // hack db class to drop tables at first open, track open pools to close on end
 const DROPPED = {}
-const OPENED = []
 
 const _PgDOWN_open = PgDOWN.prototype._open
 PgDOWN.prototype._open = function (options, cb) {
@@ -71,7 +71,6 @@ PgDOWN.prototype._open = function (options, cb) {
 
     DROPPED[location] = true
     _PgDOWN_open.call(this, options, (err) => {
-      OPENED.push(this)
       cb(err)
     })
   })

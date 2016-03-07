@@ -32,18 +32,18 @@ test('open', (t) => {
 
     db.open((err) => {
       t.ok(err, 'error on open')
-      t.end()
+      db.close(t.end)
     })
   })
 
-  t.test('malformed table name', (t) => {
+  t.skip('malformed table name', (t) => {
     const table = common.location('malformed_\0_table')
     const db = PgDOWN(table)
     t.equal(db._config._table, table, 'table name in config')
 
     db.open((err) => {
       t.ok(err, 'error on open')
-      t.end()
+      db.close(t.end)
     })
   })
 
@@ -61,12 +61,12 @@ test('open', (t) => {
         t.equal(db2.location, loc, 'location set')
         t.ok(err, 'error on open')
 
-        db2.close(t.end)
+        db1.close((err1) => {
+          db2.close((err2) => {
+            t.end(err1 || err2)
+          })
+        })
       })
     })
-  })
-
-  t.test('end', (t) => {
-    common.tearDown(t)
   })
 })

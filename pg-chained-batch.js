@@ -6,6 +6,9 @@ const util = require('./util')
 const debug = require('debug')('pgdown')
 // const debug_v = require('debug')('pgdown:verbose')
 
+module.exports = PgChainedBatch
+
+inherits(PgChainedBatch, AbstractChainedBatch)
 function PgChainedBatch (db) {
   debug('# new PgChainedBatch (db)')
 
@@ -14,8 +17,6 @@ function PgChainedBatch (db) {
   // this._txWrap = util.createTransaction(db._pool, { autoRollback: false })
   // this._tx = util.createTransaction(this._ctx)
 }
-
-inherits(PgChainedBatch, AbstractChainedBatch)
 
 // PgChainedBatch.prototype._put = function (key, value) {
 //   debug_v('# PgChainedBatch _put (key = %j, value = %j)', key, value)
@@ -47,5 +48,3 @@ PgChainedBatch.prototype._write = function (cb) {
 
   tx.commit((err) => cb(err || null))
 }
-
-module.exports = PgChainedBatch

@@ -38,13 +38,41 @@ util.comparators = {
 
 util.NotFoundError = errors.NotFoundError
 
-util.createPool = function (config) {
-  config.__id = mts()
-  return new ConnectionPool(Postgres, config, util.POOL_CONFIG)
+util.createPool = (config) => {
+  config.name = mts()
+  const pool = new ConnectionPool(Postgres, config, util.POOL_CONFIG)
+
+  pool.__clients = []
+
+  const _query = pool.query
+  pool.query = function (text) {
+    // console.warn('SQL:', text)
+    return _query.apply(this, arguments)
+  }
+
+  pool.on('acquire', (client) => {
+    pool.__clients.push(client)
+  })
+  pool.on('release', (client) => {
+    pool.__clients = pool.__clients.filter((c) => c !== client)
+  })
+
+  return pool
 }
 
-util.createTransaction = function (connection) {
-  return transaction(connection)
+util.destroyPool = (pool, cb) => {
+  pool.close((err) => {
+    if (pool.__clients.length) {
+      // pool.__clients.forEach((client) => pool.destroy(client))
+      cb(new Error('dangling clients: ' + pool.__clients.length))
+    } else {
+      cb(err)
+    }
+  })
+}
+
+util.createTransaction = function (client) {
+  return transaction(client)
 }
 
 util.createCursor = function (db, statement) {
