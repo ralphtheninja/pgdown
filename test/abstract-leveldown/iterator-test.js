@@ -14,7 +14,6 @@ module.exports.snapshot = function (leveldown, test, testCommon) {
   })
 
   test('iterator create snapshot correctly', function (t) {
-    t.timeoutAfter(2000)
     var iterator = db.iterator()
 
     // NB: this is pretty shite -- for now just a hack for testing
