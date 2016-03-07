@@ -1,7 +1,7 @@
 'use strict'
 
 const test = require('tape')
-const common = require('./_common')
+const common = require('./common')
 const util = require('../util')
 const PgDOWN = require('../')
 

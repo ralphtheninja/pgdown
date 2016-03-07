@@ -5,7 +5,7 @@ const levelup = require('levelup')
 const test = require('tape')
 const PgDOWN = require('../')
 const util = require('../util')
-const common = require('./_common')
+const common = require('./common')
 
 function pgupJSON (location, options) {
   if (typeof location !== 'string') {

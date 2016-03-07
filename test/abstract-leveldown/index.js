@@ -1,13 +1,15 @@
 'use strict'
 
 const test = require('tape')
-const common = require('./_common')
-const PgDOWN = require('../')
+const common = require('../common')
+const PgDOWN = require('../../')
 
 // TODO: use a larger buffer
 const buffer = new Buffer('00ff61626301feffff00000000ffff', 'hex')
 
 const iteratorTest = require('abstract-leveldown/abstract/iterator-test')
+
+// TODO: update snapshot test to wait for snapshot acquisition before write
 iteratorTest.snapshot = function () {}
 
 // verify compatibility w/ leveldown api
