@@ -7,7 +7,7 @@ const PgDOWN = require('../')
 const util = require('../util')
 const common = require('./common')
 
-function pgupJSON (location, options) {
+function PgUP (location, options) {
   if (typeof location !== 'string') {
     options = location
     location = null
@@ -15,14 +15,15 @@ function pgupJSON (location, options) {
 
   options = options || {}
   options.db = PgDOWN
-  options.keyEncoding = 'utf8'
-  options.valueEncoding = 'json'
 
   return levelup(location, options)
 }
 
-test('crud', (t) => {
-  const db = pgupJSON(common.location())
+test('PgUP CRUD: utf8 keyEncoding, json valueEncoding', (t) => {
+  const db = PgUP(common.location(), {
+    keyEncoding: 'utf8',
+    valueEncoding: 'json'
+  })
 
   t.test('initialize', (t) => {
     db.open((err) => {

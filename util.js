@@ -106,6 +106,7 @@ util.createTransaction = function (client) {
 util.createCursor = function (db, statement) {
   const client = Postgres.createConnection(db._config)
   const cursor = client.query(new Cursor(statement.text, statement.values))
+
   client.on('error', (err) => {
     console.warn('GOT CURSOR ERR:', err)
     client.close()

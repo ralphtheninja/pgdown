@@ -1,3 +1,3 @@
 require('./pgdown')
-require('./pgdown-json')
+require('./pgup')
 require('./abstract-leveldown')
