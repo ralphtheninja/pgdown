@@ -2,7 +2,7 @@
 
 const test = require('tape')
 const common = require('../common')
-const PgDOWN = require('../../')
+const PgDOWN = common.factory
 
 // TODO: use a larger buffer
 const buffer = new Buffer('00ff61626301feffff00000000ffff', 'hex')
@@ -23,10 +23,7 @@ const suites = {
   approximateSize: require('./approximate-size-test').all
 }
 
-const factories = [ PgDOWN ]
 
-factories.forEach((factory) => {
-  Object.keys(suites).forEach((name) => {
-    suites[name](factory, test, common, buffer)
-  })
+Object.keys(suites).forEach((name) => {
+  suites[name](PgDOWN, test, common, buffer)
 })

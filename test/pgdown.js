@@ -1,9 +1,9 @@
 'use strict'
 
 const test = require('tape')
-const common = require('./common')
 const util = require('../util')
-const PgDOWN = require('../')
+const common = require('./common')
+const PgDOWN = common.factory
 
 test('constructor', (t) => {
   t.test('defaults', (t) => {

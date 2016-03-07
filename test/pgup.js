@@ -1,23 +1,11 @@
 'use strict'
 
 const after = require('after')
-const levelup = require('levelup')
 const test = require('tape')
 const PgDOWN = require('../')
 const util = require('../util')
 const common = require('./common')
-
-function PgUP (location, options) {
-  if (typeof location !== 'string') {
-    options = location
-    location = null
-  }
-
-  options = options || {}
-  options.db = PgDOWN
-
-  return levelup(location, options)
-}
+const PgUP = common.level
 
 test('PgUP CRUD: utf8 keyEncoding, json valueEncoding', (t) => {
   const db = PgUP(common.location(), {

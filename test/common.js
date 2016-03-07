@@ -1,6 +1,8 @@
 'use strict'
 
 const after = require('after')
+const inherits = require('inherits')
+const levelup = require('levelup')
 const util = require('../util')
 const PgDOWN = require('../')
 
@@ -70,8 +72,18 @@ common.checkBatchSize = function (batch, size) {
 const DROPPED = {}
 const OPENED = []
 
+common.factory = TestPgDOWN
+
+inherits(TestPgDOWN, PgDOWN)
+function TestPgDOWN (location) {
+  if (!(this instanceof TestPgDOWN)) {
+    return new TestPgDOWN(location)
+  }
+  PgDOWN.call(this, location)
+}
+
 const _PgDOWN_open = PgDOWN.prototype._open
-PgDOWN.prototype._open = function (options, cb) {
+TestPgDOWN.prototype._open = function (options, cb) {
   const location = this.location
 
   if (location !== _last || DROPPED[location]) {
@@ -87,4 +99,16 @@ PgDOWN.prototype._open = function (options, cb) {
       cb(err)
     })
   })
+}
+
+common.level = function PgUP (location, options) {
+  if (typeof location !== 'string') {
+    options = location
+    location = null
+  }
+
+  options = options || {}
+  options.db = PgDOWN
+
+  return levelup(location, options)
 }
