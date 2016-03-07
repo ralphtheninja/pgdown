@@ -1,5 +1,6 @@
 'use strict'
 
+const after = require('after')
 const util = require('../util')
 const PgDOWN = require('../')
 
@@ -18,15 +19,25 @@ common.lastLocation = () => _last
 common.location = (loc) => (_last = loc || (common.PREFIX + (++_count)))
 
 common.cleanup = (cb) => {
-  util.destroyAll(cb)
+  const len = OPENED.length
+  const done = after(len, cb)
+
+  for (var i = 0; i < len; i++) {
+    const db = OPENED[i]
+    const pool = db && db._pool
+    if (pool) pool.close(done)
+    else done()
+  }
+
+  OPENED.length = 0
 }
 
 common.setUp = (t) => {
-  t.timeoutAfter(2000)
   common.cleanup(t.end)
 }
 
 common.tearDown = (t) => {
+  t.timeoutAfter(2000)
   common.setUp(t)
 }
 
@@ -57,6 +68,7 @@ common.checkBatchSize = function (batch, size) {
 
 // hack db class to drop tables at first open, track open pools to close on end
 const DROPPED = {}
+const OPENED = []
 
 const _PgDOWN_open = PgDOWN.prototype._open
 PgDOWN.prototype._open = function (options, cb) {
@@ -71,6 +83,7 @@ PgDOWN.prototype._open = function (options, cb) {
 
     DROPPED[location] = true
     _PgDOWN_open.call(this, options, (err) => {
+      OPENED.push(this)
       cb(err)
     })
   })

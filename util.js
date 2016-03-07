@@ -42,33 +42,34 @@ util.createPool = (config) => {
   config.name = mts()
   const pool = new ConnectionPool(Postgres, config, util.POOL_CONFIG)
 
-  pool.__clients = []
+  // pool.__clients = []
 
-  const _query = pool.query
-  pool.query = function (text) {
-    // console.warn('SQL:', text)
-    return _query.apply(this, arguments)
-  }
+  // const _query = pool.query
+  // pool.query = function (text) {
+  //   // console.warn('SQL:', text)
+  //   return _query.apply(this, arguments)
+  // }
 
-  pool.on('acquire', (client) => {
-    pool.__clients.push(client)
-  })
-  pool.on('release', (client) => {
-    pool.__clients = pool.__clients.filter((c) => c !== client)
-  })
+  // pool.on('acquire', (client) => {
+  //   pool.__clients.push(client)
+  // })
+  // pool.on('release', (client) => {
+  //   pool.__clients = pool.__clients.filter((c) => c !== client)
+  // })
 
   return pool
 }
 
 util.destroyPool = (pool, cb) => {
-  pool.close((err) => {
-    if (pool.__clients.length) {
-      // pool.__clients.forEach((client) => pool.destroy(client))
-      cb(new Error('dangling clients: ' + pool.__clients.length))
-    } else {
-      cb(err)
-    }
-  })
+  pool.close(cb)
+  // pool.close((err) => {
+  //   if (pool.__clients.length) {
+  //     // pool.__clients.forEach((client) => pool.destroy(client))
+  //     cb(new Error('dangling clients: ' + pool.__clients.length))
+  //   } else {
+  //     cb(err)
+  //   }
+  // })
 }
 
 util.createTransaction = function (client) {
@@ -114,19 +115,9 @@ PG_DEFAULTS.password = process.env.PGPASSWORD || pg.defaults.password
 PG_DEFAULTS.idleTimeout = pg.defaults.idleTimeoutMillis
 PG_DEFAULTS.reapInterval = pg.defaults.reapIntervalMillis
 
-// pool config:
-//   min: Number?,
-//   max: Number?,
-//   idleTimeout: Number?,
-//   reapInterval: Number?,
-//   refreshIdle: Boolean?,
-//   onConnect: (Connection, ready: Continuation<Connection>) => void
-//   reset: (Connection, done: Continuation<void>) => void
-//   shouldDestroyConnection: (error: Error) => Boolean
-
 util.POOL_CONFIG = {
-  min: 2,
-  max: 20,
+  min: 0,
+  max: 10,
   reset: function (conn, done) {
     conn.query('ROLLBACK', done)
   }
@@ -170,17 +161,13 @@ util.parseConfig = function (location) {
 util.dropTable = function (db, cb) {
   const client = Postgres.createConnection(db._config)
   client.on('error', (err) => util.destroyClient(err, client, cb))
-  client.query(`DROP TABLE IF EXISTS ${db._rel}`, () => util.destroyClient(null, client, cb))
+  client.query(`DROP TABLE IF EXISTS ${db._rel}`, (err) => {
+    util.destroyClient(err, client, cb)
+  })
 }
 
 util.destroyClient = function (err, client, cb) {
+  if (err) return cb(err)
   client && client.end()
-  cb(err || null)
-}
-
-util.destroyAll = function (cb) {
-  process.nextTick(() => {
-    pg.end()
-    cb()
-  })
+  process.nextTick(cb)
 }

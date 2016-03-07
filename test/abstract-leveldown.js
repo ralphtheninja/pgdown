@@ -19,7 +19,7 @@ const suites = {
   del: require('abstract-leveldown/abstract/del-test').all,
   get: require('abstract-leveldown/abstract/get-test').all,
   put_get_del: require('abstract-leveldown/abstract/put-get-del-test').all,
-  iterator: iteratorTest.all,
+  iterator: require('abstract-leveldown/abstract/iterator-test').all,
   ranges: require('abstract-leveldown/abstract/ranges-test').all,
   batch: require('abstract-leveldown/abstract/batch-test').all,
   chainedBatch: require('abstract-leveldown/abstract/chained-batch-test').all,

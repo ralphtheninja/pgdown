@@ -75,11 +75,11 @@ proto._open = function (options, cb) {
   const rel = this._rel
 
   // always create pgdown schema
-  pool.query(`CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(schema)}`, info)
+  pool.query(`
+    CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(schema)}
+  `, (err) => err ? fail(err) : info())
 
-  function info (err) {
-    if (err) return cb(err)
-
+  const info = () => {
     pool.query(`
       SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename=$2
     `, [ schema, table ], (err, result) => {
@@ -91,15 +91,17 @@ proto._open = function (options, cb) {
         err = new Error('table does not exist')
       }
 
-      if (err || !createIfMissing) {
-        cb(err || null)
-      } else {
+      if (err) {
+        fail(err)
+      } else if (createIfMissing) {
         create()
+      } else {
+        cb()
       }
     })
   }
 
-  function create () {
+  const create = () => {
     // TODO: support for jsonb, bytea using serialize[Key|Value]
     const kType = 'bytea'
     const vType = 'bytea'
@@ -111,16 +113,26 @@ proto._open = function (options, cb) {
     `, (err) => {
       debug('_open: query result %j', err)
 
-      cb(err || null)
+      err ? fail(err) : cb()
+    })
+  }
+
+  const fail = (err) => {
+    this._pool = null
+    util.destroyPool(pool, (err_) => {
+      if (err_) debug('failed to destroy pool on open err %j', err_)
+      cb(err)
     })
   }
 }
 
 proto._close = function (cb) {
   debug('## _close (cb)')
-  if (this._pool) {
-    util.destroyPool(this._pool, cb)
+
+  const pool = this._pool
+  if (pool) {
     this._pool = null
+    util.destroyPool(pool, cb)
   } else {
     process.nextTick(cb)
   }
