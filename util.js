@@ -15,7 +15,7 @@ util.escapeIdentifier = pg.Client.prototype.escapeIdentifier
 
 util.isBuffer = AbstractLevelDOWN.prototype._isBuffer
 
-util.serialize = function (type, source) {
+util.serialize = (type, source) => {
   const isBuffer = util.isBuffer(source)
 
   if (type === 'bytea') {
@@ -33,7 +33,7 @@ util.serialize = function (type, source) {
   throw new Error('cannot serialize unknown data type:' + type)
 }
 
-util.deserialize = function (type, source, asBuffer) {
+util.deserialize = (type, source, asBuffer) => {
   if (type === 'bytea') {
     return asBuffer ? source : String(source || '')
   }
@@ -99,11 +99,11 @@ util.destroyPool = (pool, cb) => {
   // })
 }
 
-util.createTransaction = function (client) {
+util.createTransaction = (client) => {
   return transaction(client)
 }
 
-util.createCursor = function (db, statement) {
+util.createCursor = (db, statement) => {
   const client = Postgres.createConnection(db._config)
   const cursor = client.query(new Cursor(statement.text, statement.values))
 
@@ -129,6 +129,7 @@ util.createCursor = function (db, statement) {
       cb && process.nextTick(cb)
     }
   }
+
   return cursor
 }
 
@@ -151,7 +152,7 @@ util.POOL_CONFIG = {
   }
 }
 
-util.parseConfig = function (location) {
+util.parseConfig = (location) => {
   const config = {}
 
   // TODO: complete postgres:// uri parsing
@@ -186,15 +187,15 @@ util.parseConfig = function (location) {
 // TODO: create/drop database, e.g.:
 // https://github.com/olalonde/pgtools/blob/master/index.js
 
-util.dropTable = function (db, cb) {
+util.dropTable = (db, cb) => {
   const client = Postgres.createConnection(db._config)
-  client.on('error', (err) => util.destroyClient(err, client, cb))
+  client.on('error', (err) => destroyClient(err, client, cb))
   client.query(`DROP TABLE IF EXISTS ${db._rel}`, (err) => {
-    util.destroyClient(err, client, cb)
+    destroyClient(err, client, cb)
   })
 }
 
-util.destroyClient = function (err, client, cb) {
+const destroyClient = (err, client, cb) => {
   if (err) return cb(err)
   client && client.end()
   process.nextTick(cb)
