@@ -19,22 +19,17 @@ function PgDOWN (location) {
   AbstractLevelDOWN.call(this, location)
   debug('# new PgDOWN (location = %j)', location)
 
-  this._config = util.parseConfig(location)
+  this._config = util.parseLocation(location)
   debug('pg config: %j', this._config)
 
-  this._table = this._config._table
-  const table = util.escapeIdentifier(this._table)
-  const schema = util.escapeIdentifier(this._schema)
+  const ident = this._config._identifier
 
-  // set relation name using (assuming pgdown as schema name)
-  const rel = this._rel = schema + '.' + table
+  this._sql_insert = `INSERT INTO ${ident} (key,value) VALUES($1,$2)`
+  this._sql_update = `UPDATE ${ident} SET value=($2) WHERE key=($1)`
 
-  this._sql_insert = `INSERT INTO ${rel} (key,value) VALUES($1,$2)`
-  this._sql_update = `UPDATE ${rel} SET value=($2) WHERE key=($1)`
-
-  this._sql_get = `SELECT value FROM ${rel} WHERE (key)=$1`
+  this._sql_get = `SELECT value FROM ${ident} WHERE (key)=$1`
   this._sql_put = this._sql_insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  this._sql_del = `DELETE FROM ${rel} WHERE (key) = $1`
+  this._sql_del = `DELETE FROM ${ident} WHERE (key) = $1`
 }
 
 const proto = PgDOWN.prototype
@@ -59,8 +54,6 @@ proto._deserializeValue = function (value, asBuffer) {
   return util.deserialize(this._valueDataType, value, asBuffer)
 }
 
-proto._schema = 'pgdown'
-
 proto._keyDataType = 'bytea'
 
 proto._valueDataType = 'bytea'
@@ -74,9 +67,8 @@ proto._open = function (options, cb) {
   const errorIfExists = options.errorIfExists
   const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
 
-  const table = this._table
-  const schema = this._schema
-  const rel = this._rel
+  const table = this._config._tablePath
+  const ident = this._config._identifier
 
   // TODO: move to helper methods
   const kEnc = options.keyEncoding
@@ -97,19 +89,19 @@ proto._open = function (options, cb) {
 
   // always create pgdown schema
   pool.query(`
-    CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(schema)}
+    CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(util.schemaName)}
   `, (err) => err ? fail(err) : info())
 
   const info = () => {
     pool.query(`
       SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename=$2
-    `, [ schema, table ], (err, result) => {
+    `, [ util.schemaName, table ], (err, result) => {
       const exists = result && result.rowCount === 1
 
       if (errorIfExists && exists) {
-        err = new Error('table exists: ' + table)
+        err = new Error('table already exists: ' + table)
       } else if (!createIfMissing && !exists) {
-        err = new Error('table does not exist')
+        err = new Error('table does not exist: ' + table)
       }
 
       if (err) {
@@ -125,7 +117,7 @@ proto._open = function (options, cb) {
   const create = () => {
     // TODO: support for jsonb, bytea using serialize[Key|Value]
     pool.query(`
-      CREATE TABLE ${IF_NOT_EXISTS} ${rel} (
+      CREATE TABLE ${IF_NOT_EXISTS} ${ident} (
         key ${this._keyDataType} PRIMARY KEY,
         value ${this._valueDataType}
       )
@@ -219,7 +211,8 @@ proto._approximateSize = function (start, end, cb) {
   // generate standard iterator sql and replace head clause
   const context = PgIterator._parseOptions(this, options)
 
-  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${this._rel} as tbl`
+  const ident = this._config._identifier
+  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${ident} as tbl`
   context.clauses.unshift(head)
   const text = context.clauses.join(' ')
 
@@ -235,3 +228,5 @@ proto._approximateSize = function (start, end, cb) {
     }
   })
 }
+
+PgDOWN.destroy = util.dropTable

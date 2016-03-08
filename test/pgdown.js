@@ -1,7 +1,6 @@
 'use strict'
 
 const test = require('tape')
-const util = require('../util')
 const common = require('./_common')
 const PgDOWN = common.factory
 
@@ -9,9 +8,9 @@ test('constructor', (t) => {
   t.test('defaults', (t) => {
     const db = PgDOWN(common.location())
     const config = db._config
-    t.equal(config.database, util.PG_DEFAULTS.database, 'uses default database')
-    t.equal(db._table.indexOf(common.PREFIX), 0, 'table name uses test prefix')
-    t.ok(db._rel.indexOf(config._table) >= 0, 'qualified name includes table name')
+    t.equal(config.database, common.PG_DEFAULTS.database, 'uses default database')
+    t.equal(config._tablePath.indexOf(common.PREFIX), 0, 'table name uses test prefix')
+    t.ok(config._identifier.indexOf(config._tablePath) >= 0, 'qualified name includes table name')
     t.end()
   })
 })

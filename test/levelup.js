@@ -3,8 +3,8 @@
 const after = require('after')
 const levelup = require('levelup')
 const test = require('tape')
-const util = require('../util')
 const common = require('./_common')
+const destroy = require('../').destroy
 
 test('utf8 keyEncoding, json valueEncoding', (t) => {
   const db = levelup(common.location(), {
@@ -14,13 +14,9 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
   })
 
   t.test('initialize', (t) => {
-    db.open((err) => {
+    destroy(db.location, (err) => {
       if (err) return t.end(err)
-
-      util.dropTable(db.db, (err) => {
-        if (err) return t.end(err)
-        db.close(t.end)
-      })
+      db.open(t.end)
     })
   })
 

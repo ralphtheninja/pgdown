@@ -151,20 +151,18 @@ util.POOL_CONFIG = {
   }
 }
 
-util.parseConfig = function (location) {
+util.schemaName = 'pgdown'
+
+util.parseLocation = function (location) {
   const config = {}
-
-  // TODO: complete postgres:// uri parsing
-  const parts = location.split('/')
-
-  // last component of location specifies table name
-  const table = config._table = parts.pop()
-  if (!table) throw new Error('location must specify table name')
 
   // copy over pg defaults
   for (var key in PG_DEFAULTS) {
     if (PG_DEFAULTS[key] !== undefined) config[key] = PG_DEFAULTS[key]
   }
+
+  // TODO: complete postgres:// uri parsing
+  const parts = location.split('/')
 
   // location beginning with slash specifies database name
   if (location[0] === '/') {
@@ -172,13 +170,15 @@ util.parseConfig = function (location) {
     config.database = parts.shift() || config.database
   }
 
-  // NB: this will eventually allow us to support subleveling natively
-  // TODO: use extra path parts for schema name
-  if (parts.length) throw new Error('sublevel paths NYI')
+  // remaining components of location specifiy sublevel path/table name
+  config._tablePath = parts.join('/')
+  if (!config._tablePath) throw new Error('location must specify table name')
 
-  // remaining components represent schema namespace
-  // TODO: surface default `public` schema in opts?
-  // config._path = parts.length ? parts.join('__') : null
+  const schema = util.escapeIdentifier(util.schemaName)
+  const table = util.escapeIdentifier(config._tablePath)
+
+  // set relation name using (assuming pgdown as schema name)
+  config._identifier = schema + '.' + table
 
   return config
 }
@@ -186,10 +186,11 @@ util.parseConfig = function (location) {
 // TODO: create/drop database, e.g.:
 // https://github.com/olalonde/pgtools/blob/master/index.js
 
-util.dropTable = function (db, cb) {
-  const client = Postgres.createConnection(db._config)
+util.dropTable = function (location, cb) {
+  const config = util.parseLocation(location)
+  const client = Postgres.createConnection(config)
   client.on('error', (err) => util.destroyClient(err, client, cb))
-  client.query(`DROP TABLE IF EXISTS ${db._rel}`, (err) => {
+  client.query(`DROP TABLE IF EXISTS ${config._identifier}`, (err) => {
     util.destroyClient(err, client, cb)
   })
 }
