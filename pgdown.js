@@ -22,14 +22,14 @@ function PgDOWN (location) {
   this._config = util.parseLocation(location)
   debug('pg config: %j', this._config)
 
-  const ident = this._config._identifier
+  const relName = this._config._relName
 
-  this._sql_insert = `INSERT INTO ${ident} (key,value) VALUES($1,$2)`
-  this._sql_update = `UPDATE ${ident} SET value=($2) WHERE key=($1)`
+  this._sql_insert = `INSERT INTO ${relName} (key,value) VALUES($1,$2)`
+  this._sql_update = `UPDATE ${relName} SET value=($2) WHERE key=($1)`
 
-  this._sql_get = `SELECT value FROM ${ident} WHERE (key)=$1`
+  this._sql_get = `SELECT value FROM ${relName} WHERE (key)=$1`
   this._sql_put = this._sql_insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  this._sql_del = `DELETE FROM ${ident} WHERE (key) = $1`
+  this._sql_del = `DELETE FROM ${relName} WHERE (key) = $1`
 }
 
 const proto = PgDOWN.prototype
@@ -61,14 +61,16 @@ proto._valueDataType = 'bytea'
 proto._open = function (options, cb) {
   debug('## _open (options = %j, cb)', options)
 
-  const pool = this._pool = util.createPool(this._config)
+  const config = this._config
+  const pool = this._pool = util.createPool(config)
 
   const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
   const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
 
-  const table = this._config._tablePath
-  const ident = this._config._identifier
+  const schemaName = config._schemaName
+  const tableName = config._tableName
+  const relName = config._relName
 
   // TODO: move to helper methods
   const kEnc = options.keyEncoding
@@ -89,19 +91,19 @@ proto._open = function (options, cb) {
 
   // always create pgdown schema
   pool.query(`
-    CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(util.schemaName)}
+    CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(schemaName)}
   `, (err) => err ? fail(err) : info())
 
   const info = () => {
     pool.query(`
       SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename=$2
-    `, [ util.schemaName, table ], (err, result) => {
+    `, [ schemaName, tableName ], (err, result) => {
       const exists = result && result.rowCount === 1
 
       if (errorIfExists && exists) {
-        err = new Error('table already exists: ' + table)
+        err = new Error('table already exists: ' + tableName)
       } else if (!createIfMissing && !exists) {
-        err = new Error('table does not exist: ' + table)
+        err = new Error('table does not exist: ' + tableName)
       }
 
       if (err) {
@@ -117,7 +119,7 @@ proto._open = function (options, cb) {
   const create = () => {
     // TODO: support for jsonb, bytea using serialize[Key|Value]
     pool.query(`
-      CREATE TABLE ${IF_NOT_EXISTS} ${ident} (
+      CREATE TABLE ${IF_NOT_EXISTS} ${relName} (
         key ${this._keyDataType} PRIMARY KEY,
         value ${this._valueDataType}
       )
@@ -211,8 +213,8 @@ proto._approximateSize = function (start, end, cb) {
   // generate standard iterator sql and replace head clause
   const context = PgIterator._parseOptions(this, options)
 
-  const ident = this._config._identifier
-  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${ident} as tbl`
+  const relName = this._config._relName
+  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${relName} as tbl`
   context.clauses.unshift(head)
   const text = context.clauses.join(' ')
 

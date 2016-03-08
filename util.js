@@ -151,6 +151,7 @@ util.POOL_CONFIG = {
   }
 }
 
+// TODO: move this into PgDOWN class
 util.schemaName = 'pgdown'
 
 util.parseLocation = function (location) {
@@ -171,14 +172,16 @@ util.parseLocation = function (location) {
   }
 
   // remaining components of location specifiy sublevel path/table name
-  config._tablePath = parts.join('/')
-  if (!config._tablePath) throw new Error('location must specify table name')
+  config._tableName = parts.join('/')
+  if (!config._tableName) throw new Error('location must specify table name')
 
-  const schema = util.escapeIdentifier(util.schemaName)
-  const table = util.escapeIdentifier(config._tablePath)
+  config._schemaName = util.schemaName
+
+  const escapedSchemaName = util.escapeIdentifier(config._schemaName)
+  const escapedTableName = util.escapeIdentifier(config._tableName)
 
   // set relation name using (assuming pgdown as schema name)
-  config._identifier = schema + '.' + table
+  config._relName = escapedSchemaName + '.' + escapedTableName
 
   return config
 }
@@ -190,7 +193,7 @@ util.dropTable = function (location, cb) {
   const config = util.parseLocation(location)
   const client = Postgres.createConnection(config)
   client.on('error', (err) => util.destroyClient(err, client, cb))
-  client.query(`DROP TABLE IF EXISTS ${config._identifier}`, (err) => {
+  client.query(`DROP TABLE IF EXISTS ${config._relName}`, (err) => {
     util.destroyClient(err, client, cb)
   })
 }

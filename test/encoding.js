@@ -155,10 +155,9 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
     })
   })
 
-  t.test('close', (t) => {
+  t.test('idempotent close', (t) => {
     db.close((err) => {
       if (err) return t.end(err)
-      // idempotent close
       db.close(t.end)
     })
   })

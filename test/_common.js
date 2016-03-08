@@ -11,8 +11,10 @@ common.PG_DEFAULTS = util.PG_DEFAULTS
 
 common.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
 common.PG_DEFAULTS.idleTimeout = Number(process.env.PGDOWN_TEST_IDLE_TIMEOUT) || 2000
+common.PREFIX = process.env.PGDOWN_TEST_PREFIX || 'table_'
 
-common.PREFIX = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
+// use a distinct schema for tests
+common.SCHEMA = util.schemaName = process.env.PGDOWN_TEST_SCHEMA || 'pgdown_test'
 
 var _count = 0
 var _last
