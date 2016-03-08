@@ -1,25 +1,22 @@
 'use strict'
 
 const after = require('after')
+const levelup = require('levelup')
 const test = require('tape')
-const util = require('../util')
-const common = require('./common')
-const PgUP = common.level
+const common = require('./_common')
+const destroy = require('../').destroy
 
-test('PgUP CRUD: utf8 keyEncoding, json valueEncoding', (t) => {
-  const db = PgUP(common.location(), {
+test('utf8 keyEncoding, json valueEncoding', (t) => {
+  const db = levelup(common.location(), {
+    db: common.factory,
     keyEncoding: 'utf8',
     valueEncoding: 'json'
   })
 
   t.test('initialize', (t) => {
-    db.open((err) => {
+    destroy(db.location, (err) => {
       if (err) return t.end(err)
-
-      util.dropTable(db.db, (err) => {
-        if (err) return t.end(err)
-        db.close(t.end)
-      })
+      db.open(t.end)
     })
   })
 
@@ -158,10 +155,9 @@ test('PgUP CRUD: utf8 keyEncoding, json valueEncoding', (t) => {
     })
   })
 
-  t.test('close', (t) => {
+  t.test('idempotent close', (t) => {
     db.close((err) => {
       if (err) return t.end(err)
-      // idempotent close
       db.close(t.end)
     })
   })

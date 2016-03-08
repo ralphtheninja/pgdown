@@ -2,16 +2,19 @@
 
 const after = require('after')
 const inherits = require('inherits')
-const levelup = require('levelup')
 const util = require('../util')
 const PgDOWN = require('../')
 
-util.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
-util.PG_DEFAULTS.idleTimeout = 2000
-
 const common = exports
 
-common.PREFIX = process.env.PGDOWN_TEST_PREFIX || 'pgdown_test_'
+common.PG_DEFAULTS = util.PG_DEFAULTS
+
+common.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
+common.PG_DEFAULTS.idleTimeout = Number(process.env.PGDOWN_TEST_IDLE_TIMEOUT) || 2000
+common.PREFIX = process.env.PGDOWN_TEST_PREFIX || 'table_'
+
+// use a distinct schema for tests
+common.SCHEMA = util.schemaName = process.env.PGDOWN_TEST_SCHEMA || 'pgdown_test'
 
 var _count = 0
 var _last
@@ -21,17 +24,17 @@ common.lastLocation = () => _last
 common.location = (loc) => (_last = loc || (common.PREFIX + (++_count)))
 
 common.cleanup = (cb) => {
-  const len = OPENED.length
+  const len = common.OPENED.length
   const done = after(len, cb)
 
   for (var i = 0; i < len; i++) {
-    const db = OPENED[i]
+    const db = common.OPENED[i]
     const pool = db && db._pool
     if (pool) pool.close(done)
     else done()
   }
 
-  OPENED.length = 0
+  common.OPENED.length = 0
 }
 
 common.setUp = (t) => {
@@ -68,10 +71,9 @@ common.checkBatchSize = function (batch, size) {
   return size > total * common.maxCompressionFactor
 }
 
-// hack db class to drop tables at first open, track open pools to close on end
-const DROPPED = {}
-const OPENED = []
-
+// hack db class to drop tables on first open, track open pools to close on end
+common.OPENED = []
+common.DROPPED = {}
 common.factory = TestPgDOWN
 
 inherits(TestPgDOWN, PgDOWN)
@@ -86,29 +88,17 @@ const _PgDOWN_open = PgDOWN.prototype._open
 TestPgDOWN.prototype._open = function (options, cb) {
   const location = this.location
 
-  if (location !== _last || DROPPED[location]) {
+  if (location !== _last || common.DROPPED[location]) {
     return _PgDOWN_open.call(this, options, cb)
   }
 
-  util.dropTable(this, (err) => {
+  util.dropTable(location, (err) => {
     if (err) return cb(err)
 
-    DROPPED[location] = true
+    common.DROPPED[location] = true
     _PgDOWN_open.call(this, options, (err) => {
-      OPENED.push(this)
+      common.OPENED.push(this)
       cb(err)
     })
   })
-}
-
-common.level = function PgUP (location, options) {
-  if (typeof location !== 'string') {
-    options = location
-    location = null
-  }
-
-  options = options || {}
-  options.db = PgDOWN
-
-  return levelup(location, options)
 }

@@ -9,7 +9,12 @@
     "lint": "standard",
     "nsp": "nsp check"
   },
-  "keywords": [],
+  "keywords": [
+    "level",
+    "leveldown",
+    "postgres",
+    "db"
+  ],
   "author": "Lars-Magnus Skog <ralphtheninja@riseup.net>",
   "license": "MIT",
   "repository": "ralphtheninja/pgdown",

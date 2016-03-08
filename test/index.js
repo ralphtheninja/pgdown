@@ -1,3 +1,3 @@
 require('./pgdown')
-require('./pgup')
+require('./encoding')
 require('./abstract-leveldown')

@@ -1,8 +1,7 @@
 'use strict'
 
 const test = require('tape')
-const common = require('../common')
-const PgDOWN = common.factory
+const common = require('../_common')
 
 // TODO: use a larger buffer
 const buffer = new Buffer('00ff61626301feffff00000000ffff', 'hex')
@@ -24,5 +23,5 @@ const suites = {
 }
 
 Object.keys(suites).forEach((name) => {
-  suites[name](PgDOWN, test, common, buffer)
+  suites[name](common.factory, test, common, buffer)
 })
