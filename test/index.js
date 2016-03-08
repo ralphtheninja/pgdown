@@ -1,3 +1,3 @@
 require('./pgdown')
-require('./pgup')
+require('./levelup')
 require('./abstract-leveldown')

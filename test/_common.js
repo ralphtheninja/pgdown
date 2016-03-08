@@ -2,7 +2,6 @@
 
 const after = require('after')
 const inherits = require('inherits')
-const levelup = require('levelup')
 const util = require('../util')
 const PgDOWN = require('../')
 
@@ -68,9 +67,9 @@ common.checkBatchSize = function (batch, size) {
   return size > total * common.maxCompressionFactor
 }
 
-// hack db class to drop tables at first open, track open pools to close on end
-const DROPPED = {}
+// hack db class to drop tables on first open, track open pools to close on end
 const OPENED = []
+const DROPPED = {}
 
 common.factory = TestPgDOWN
 
@@ -99,16 +98,4 @@ TestPgDOWN.prototype._open = function (options, cb) {
       cb(err)
     })
   })
-}
-
-common.level = function PgUP (location, options) {
-  if (typeof location !== 'string') {
-    options = location
-    location = null
-  }
-
-  options = options || {}
-  options.db = PgDOWN
-
-  return levelup(location, options)
 }

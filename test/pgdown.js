@@ -2,7 +2,7 @@
 
 const test = require('tape')
 const util = require('../util')
-const common = require('./common')
+const common = require('./_common')
 const PgDOWN = common.factory
 
 test('constructor', (t) => {
