@@ -21,15 +21,6 @@ function PgDOWN (location) {
 
   this._config = util.parseLocation(location)
   debug('pg config: %j', this._config)
-
-  const relation = this._config._relation
-
-  this._sql_insert = `INSERT INTO ${relation} (key,value) VALUES($1,$2)`
-  this._sql_update = `UPDATE ${relation} SET value=($2) WHERE key=($1)`
-
-  this._sql_get = `SELECT value FROM ${relation} WHERE (key)=$1`
-  this._sql_put = this._sql_insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  this._sql_del = `DELETE FROM ${relation} WHERE (key) = $1`
 }
 
 const proto = PgDOWN.prototype
@@ -56,6 +47,36 @@ proto._deserializeKey = function (key, asBuffer) {
 proto._deserializeValue = function (value, asBuffer) {
   debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
   return util.deserialize(this._valueColumnType, value, asBuffer)
+}
+
+// TODO: memoized getters
+
+proto._sql_get = function (key) {
+  return `
+    SELECT value FROM ${this._config._relation} WHERE (key)=$1
+  `
+}
+
+proto._sql_del = function (key) {
+  return `
+    DELETE FROM ${this._config._relation} WHERE (key)=$1
+  `
+}
+
+proto._sql_insert = function () {
+  return `
+    INSERT INTO ${this._config._relation} (key, value) VALUES($1,$2)
+  `
+}
+
+proto._sql_update = function () {
+  return `
+    UPDATE ${this._config._relation} SET value=($2) WHERE key=($1)
+  `
+}
+
+proto._sql_put = function (key, value) {
+  return this._sql_insert() + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
 }
 
 proto._open = function (options, cb) {
@@ -146,7 +167,7 @@ proto._close = function (cb) {
 proto._get = function (key, options, cb) {
   debug('## _get (key = %j, options = %j, cb)', key, options)
 
-  this._pool.query(this._sql_get, [ key ], (err, result) => {
+  this._pool.query(this._sql_get(), [ key ], (err, result) => {
     debug('_get: query result %j %j', err, result)
 
     if (err) {
@@ -179,11 +200,11 @@ proto._batch = function (ops, options, cb) {
   ops.forEach((op) => {
     // TODO: merge op.options with batch options?
     if (op.type === 'put') {
-      tx.query(this._sql_put, [ op.key, op.value ])
+      tx.query(this._sql_put(), [ op.key, op.value ])
     } else if (op.type === 'del') {
-      tx.query(this._sql_del, [ op.key ])
+      tx.query(this._sql_del(), [ op.key ])
     } else {
-      debug('_batch: unknown operation %j', op)
+      debug('_batch: unknown batch operation %j', op)
     }
   })
 

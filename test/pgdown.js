@@ -62,8 +62,8 @@ test('open', (t) => {
     })
   })
 
-  t.test('weird table name (0xfe byte)', (t) => {
-    const db = PgDOWN(common.location('weird_\xfe_table'))
+  t.test('weird table name (0xff byte)', (t) => {
+    const db = PgDOWN(common.location('weird_\xff_table'))
     db.open((err) => {
       if (err) return t.end(err)
       db.close(t.end)

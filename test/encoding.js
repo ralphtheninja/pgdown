@@ -7,6 +7,8 @@ const common = require('./_common')
 const destroy = require('../').destroy
 
 test('utf8 keyEncoding, json valueEncoding', (t) => {
+  t.timeoutAfter(2000)
+
   const db = levelup(common.location(), {
     db: common.db,
     keyEncoding: 'utf8',
@@ -128,28 +130,63 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
     })
   })
 
-  t.skip('value with null byte', (t) => {
-    const v = 'i can haz \0 byte?'
-    db.put('nullv', v, (err) => {
-      if (err) return t.end(err)
+  t.test('abnormal bytes in keys/values', (t) => {
+    const VAL = { str: 'foo', int: 123 }
 
-      db.get('nullv', (err, value) => {
+    t.test('key with null byte', (t) => {
+      db.put('null\x00key', VAL, (err) => {
         if (err) return t.end(err)
-        t.equal(value, v, 'value with null byte')
-        t.end()
+        db.get('null\x00key', (err, value) => {
+          if (err) return t.end(err)
+          t.deepEqual(value, VAL, 'correct value')
+          t.end()
+        })
       })
     })
-  })
 
-  t.skip('key with null byte', (t) => {
-    const v = 'value for key with null byte'
-    db.put('null\0k', v, (err) => {
-      if (err) return t.end(err)
-
-      db.get('null\0k', (err, value) => {
+    t.test('key with weird char (\\x01)', (t) => {
+      db.put('weird\x01key', VAL, (err) => {
         if (err) return t.end(err)
-        t.deepEqual(value, v, 'value for key with null byte')
-        t.end()
+        db.get('weird\x01key', (err, value) => {
+          if (err) return t.end(err)
+          t.deepEqual(value, VAL, 'correct value')
+          t.end()
+        })
+      })
+    })
+
+    t.test('key with weird char (\\xff)', (t) => {
+      db.put('weird\xffkey', VAL, (err) => {
+        if (err) return t.end(err)
+        db.get('weird\xffkey', (err, value) => {
+          if (err) return t.end(err)
+          t.deepEqual(value, VAL, 'correct value')
+          t.end()
+        })
+      })
+    })
+
+    t.test('key with weird char (\\uffff)', (t) => {
+      db.put('weird\uffffkey', VAL, (err) => {
+        if (err) return t.end(err)
+        db.get('weird\uffffkey', (err, value) => {
+          if (err) return t.end(err)
+          t.deepEqual(value, VAL, 'correct value')
+          t.end()
+        })
+      })
+    })
+
+    t.skip('value with null byte', (t) => {
+      const v = { str: 'i can haz \0 byte?' }
+
+      db.put('null_value', v, (err) => {
+        if (err) return t.end(err)
+        db.get('null_value', (err, value) => {
+          if (err) return t.end(err)
+          t.equal(value, v, 'correct value')
+          t.end()
+        })
       })
     })
   })

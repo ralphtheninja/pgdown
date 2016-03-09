@@ -20,12 +20,12 @@ function PgChainedBatch (db) {
 
 // PgChainedBatch.prototype._put = function (key, value) {
 //   debug_v('# PgChainedBatch _put (key = %j, value = %j)', key, value)
-//   this._tx.query(this._db._sql_put, [ key, value ])
+//   this._tx.query(this._db._sql_put(), [ key, value ])
 // }
 
 // PgChainedBatch.prototype._del = function (key) {
 //   debug_v('# PgChainedBatch _del (key = %j)', key)
-//   this._tx.query(this._db._sql_del, [ key ])
+//   this._tx.query(this._db._sql_del(), [ key ])
 // }
 
 // PgChainedBatch.prototype._clear = function () {
@@ -40,9 +40,11 @@ PgChainedBatch.prototype._write = function (cb) {
   const tx = util.createTransaction(this._db._pool)
   this._operations.forEach((op) => {
     if (op.type === 'put') {
-      tx.query(this._db._sql_put, [ op.key, op.value ])
+      tx.query(this._db._sql_put(), [ op.key, op.value ])
+    } else if (op.type === 'del') {
+      tx.query(this._db._sql_del(), [ op.key ])
     } else {
-      tx.query(this._db._sql_del, [ op.key ])
+      debug('_batch: unknown chained batch operation %j', op)
     }
   })
 

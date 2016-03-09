@@ -13,6 +13,15 @@ const errors = require('level-errors')
 
 util.escape = require('pg-format')
 
+// // override pg serialization
+// const pgUtils = require('pg/lib/utils')
+// const __prepareValue = pgUtils.prepareValue
+// pgUtils.prepareValue = function (value) {
+//   const result = __prepareValue(value)
+//   console.warn('PREPARED VALUE', value, result)
+//   return result
+// }
+
 util.isBuffer = AbstractLevelDOWN.prototype._isBuffer
 
 util.serialize = (type, source) => {
@@ -22,7 +31,7 @@ util.serialize = (type, source) => {
 }
 
 util.serialize.bytea = (source) => (
-  util.isBuffer(source) ? source : source == null ? '' : String(source)
+  util.isBuffer(source) ? source : new Buffer(source == null ? '' : String(source), 'utf8')
 )
 
 util.serialize.text = (source) => (
@@ -102,7 +111,11 @@ util.destroyPool = (pool, cb) => {
 }
 
 util.createTransaction = (client) => {
-  return transaction(client)
+  const tx = transaction(client)
+  tx.on('error', (err) => {
+    console.warn('TX ERR', err)
+  })
+  return tx
 }
 
 util.createCursor = (db, statement) => {
@@ -110,7 +123,7 @@ util.createCursor = (db, statement) => {
   const cursor = client.query(new Cursor(statement.text, statement.values))
 
   client.on('error', (err) => {
-    console.warn('GOT CURSOR ERR:', err)
+    console.warn('CURSOR ERR:', err)
     client.close()
   })
 
@@ -145,7 +158,6 @@ PG_DEFAULTS.user = process.env.PGUSER || pg.defaults.user
 PG_DEFAULTS.password = process.env.PGPASSWORD || pg.defaults.password
 PG_DEFAULTS.idleTimeout = pg.defaults.idleTimeoutMillis
 PG_DEFAULTS.reapInterval = pg.defaults.reapIntervalMillis
-PG_DEFAULTS.binary = false
 
 util.POOL_CONFIG = {
   min: 0,

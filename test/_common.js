@@ -85,19 +85,19 @@ function TestPgDOWN (location) {
   PgDOWN.call(this, location)
 }
 
-const _PgDOWN_open = PgDOWN.prototype._open
+const __PgDOWN_open = PgDOWN.prototype._open
 TestPgDOWN.prototype._open = function (options, cb) {
   const location = this.location
 
   if (location !== _last || common.DROPPED[location]) {
-    return _PgDOWN_open.call(this, options, cb)
+    return __PgDOWN_open.call(this, options, cb)
   }
 
   util.dropTable(location, (err) => {
     if (err) return cb(err)
 
     common.DROPPED[location] = true
-    _PgDOWN_open.call(this, options, (err) => {
+    __PgDOWN_open.call(this, options, (err) => {
       common.OPENED.push(this)
       cb(err)
     })
