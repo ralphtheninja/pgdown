@@ -39,7 +39,7 @@ util.serialize.text = (source) => (
 )
 
 util.serialize.jsonb = (source) => (
-  JSON.parse(util.isBuffer(source) ? source.toString('utf8') : source)
+  util.isBuffer(source) ? source.toString('utf8') : source == null ? null : String(source)
 )
 
 util.deserialize = (type, source, asBuffer) => {

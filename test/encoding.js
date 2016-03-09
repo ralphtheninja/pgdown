@@ -112,6 +112,297 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
     })
   })
 
+  t.test('non-object values', (t) => {
+    t.test('nullish values', (t) => {
+      t.test('null value', (t) => {
+        const k = 'null'
+        db.put(k, null, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, null, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('undefined value', (t) => {
+        const k = 'undefined'
+        db.put(k, undefined, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, null, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('NaN value', (t) => {
+        const k = 'NaN'
+        db.put(k, NaN, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, null, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('Invalid Date value', (t) => {
+        const k = 'Invalid Date'
+        db.put(k, new Date('xxxx'), (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, null, 'correct value')
+            t.end()
+          })
+        })
+      })
+    })
+
+    t.test('boolean values', (t) => {
+      t.test('false value', (t) => {
+        const k = 'false'
+        db.put(k, false, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, false, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('true value', (t) => {
+        const k = 'true'
+        db.put(k, true, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, true, 'correct value')
+            t.end()
+          })
+        })
+      })
+    })
+
+    t.test('string values', (t) => {
+      t.test('long string', (t) => {
+        const k = 'true'
+        const v = Array.apply(null, Array(1000)).map(() => 'Hello there.\r\n').join('')
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('string with weird char (\\x01)', (t) => {
+        const k = 'weird value'
+        const v = 'weird \x01 char'
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('string with weird char (\\uffff)', (t) => {
+        const k = 'weird value'
+        const v = 'weird \uffff char'
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('string with nullish surrogate pair', (t) => {
+        const k = 'surrogate pair'
+        const v = 'pair \xc0\x80'
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.skip('string with null byte', (t) => {
+        const k = 'null byte'
+        const v = 'null \0 byte'
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+    })
+
+    t.test('numeric values', (t) => {
+      t.test('negative zero', (t) => {
+        const k = 'zero'
+        db.put(k, -0, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, 0, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('integer', (t) => {
+        const k = 'integer'
+        const v = 21
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('float', (t) => {
+        const k = 'float'
+        const v = -29.3123433726
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('exponential', (t) => {
+        const k = 'exponential'
+        const v = 4.56e-123
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+    })
+
+    t.test('date values', (t) => {
+      t.test('y2k', (t) => {
+        const k = 'y2k'
+        const v = new Date('2000-01-01Z')
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, '2000-01-01T00:00:00.000Z', 'correct value')
+            t.end()
+          })
+        })
+      })
+    })
+
+    t.test('array values', (t) => {
+      t.test('long array', (t) => {
+        const k = 'true'
+        const v = Array.apply(null, Array(1000)).map(() => 'Hello there.\r\n')
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.deepEqual(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('mixed array', (t) => {
+        const k = 'mixed array'
+        const v = [ 'foo', 123, [], { str: 'true' } ]
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.deepEqual(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+    })
+  })
+
+  t.test('abnormal bytes in keys/values', (t) => {
+    t.test('key with null byte', (t) => {
+      const k = 'null\x00key'
+      db.put(k, 'val', (err) => {
+        if (err) return t.end(err)
+        db.get(k, (err, value) => {
+          if (err) return t.end(err)
+          t.equal(value, 'val', 'correct value')
+          t.end()
+        })
+      })
+    })
+
+    t.test('key with weird char (\\x01)', (t) => {
+      const k = 'weird\x01key'
+      db.put(k, 'val', (err) => {
+        if (err) return t.end(err)
+        db.get(k, (err, value) => {
+          if (err) return t.end(err)
+          t.equal(value, 'val', 'correct value')
+          t.end()
+        })
+      })
+    })
+
+    t.test('key with weird char (\\xff)', (t) => {
+      const k = 'weird\xffkey'
+      db.put(k, 'val', (err) => {
+        if (err) return t.end(err)
+        db.get(k, (err, value) => {
+          if (err) return t.end(err)
+          t.equal(value, 'val', 'correct value')
+          t.end()
+        })
+      })
+    })
+
+    t.test('key with weird char (\\uffff)', (t) => {
+      const k = 'weird\uffffkey'
+      db.put(k, 'val', (err) => {
+        if (err) return t.end(err)
+        db.get(k, (err, value) => {
+          if (err) return t.end(err)
+          t.equal(value, 'val', 'correct value')
+          t.end()
+        })
+      })
+    })
+  })
+
   t.test('approximate size', (t) => {
     db.db.approximateSize('a', 'ac', (err, size1) => {
       if (err) return t.end(err)
@@ -122,71 +413,11 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
       db.db.approximateSize('a', 'ab', (err, size2) => {
         if (err) return t.end(err)
 
+        t.ok(size2 < size1, 'smaller than superset size')
         t.ok(size2 > 0, 'positive')
         t.equal(parseInt(size2), size2, 'integer')
         t.ok(size1 > size2)
         t.end()
-      })
-    })
-  })
-
-  t.test('abnormal bytes in keys/values', (t) => {
-    const VAL = { str: 'foo', int: 123 }
-
-    t.test('key with null byte', (t) => {
-      db.put('null\x00key', VAL, (err) => {
-        if (err) return t.end(err)
-        db.get('null\x00key', (err, value) => {
-          if (err) return t.end(err)
-          t.deepEqual(value, VAL, 'correct value')
-          t.end()
-        })
-      })
-    })
-
-    t.test('key with weird char (\\x01)', (t) => {
-      db.put('weird\x01key', VAL, (err) => {
-        if (err) return t.end(err)
-        db.get('weird\x01key', (err, value) => {
-          if (err) return t.end(err)
-          t.deepEqual(value, VAL, 'correct value')
-          t.end()
-        })
-      })
-    })
-
-    t.test('key with weird char (\\xff)', (t) => {
-      db.put('weird\xffkey', VAL, (err) => {
-        if (err) return t.end(err)
-        db.get('weird\xffkey', (err, value) => {
-          if (err) return t.end(err)
-          t.deepEqual(value, VAL, 'correct value')
-          t.end()
-        })
-      })
-    })
-
-    t.test('key with weird char (\\uffff)', (t) => {
-      db.put('weird\uffffkey', VAL, (err) => {
-        if (err) return t.end(err)
-        db.get('weird\uffffkey', (err, value) => {
-          if (err) return t.end(err)
-          t.deepEqual(value, VAL, 'correct value')
-          t.end()
-        })
-      })
-    })
-
-    t.skip('value with null byte', (t) => {
-      const v = { str: 'i can haz \0 byte?' }
-
-      db.put('null_value', v, (err) => {
-        if (err) return t.end(err)
-        db.get('null_value', (err, value) => {
-          if (err) return t.end(err)
-          t.equal(value, v, 'correct value')
-          t.end()
-        })
       })
     })
   })
