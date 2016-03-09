@@ -26,10 +26,25 @@ db.put('foo', { bar: 'baz' }, (err) => {
 })
 ```
 
-## Config
+## Api
 
-Database config can be specified as a `postgres://` uri in the `location` string passed to the `PgDOWN` factory function. Otherwise, it will be pulled from the `PG*` environment variables (TODO: document this), falling back to the defaults in the `pg` client lib.
+#### `pgdown(location)`
 
+Creates a `PgDOWN` object with `location` which can take the following forms:
+
+* `postgres://<user>:<password>@<host>:<port>/<database>/<table>`
+* `/<database>/<table>`
+
+An `options` object is created based on the location and passed to [`pg.Client`](https://github.com/brianc/node-postgres/wiki/Client#new-clientobject-config--client). However, `pgdown` respects the _default_ environment variables used by [`PostgreSQL`](http://www.postgresql.org/docs/9.5/static/libpq-envars.html) in favor of the ones used in `pg`.
+
+To summarize we have the following properties and their default values:
+
+* `database` from `location` _or_ `$PGDATABASE` _or_ `'postgres'`
+* `host` from `location` _or_ `$PGHOSTADDR` _or_ `'localhost'`
+* `port` from `location` _or_ `$PGPORT` _or_ `5432`
+* `user` from `location` _or_ `$PGUSER` _or_ `$USERNAME` (win32) _or_ `$USER`
+* `password` from `location` _or_ `$PGPASSWORD` _or_ `null`
 
 ## License
+
 MIT
