@@ -16,39 +16,40 @@ util.escapeIdentifier = pg.Client.prototype.escapeIdentifier
 util.isBuffer = AbstractLevelDOWN.prototype._isBuffer
 
 util.serialize = (type, source) => {
-  const isBuffer = util.isBuffer(source)
-
-  if (type === 'bytea') {
-    return isBuffer ? source : source == null ? '' : String(source)
-  }
-
-  if (type === 'text') {
-    return isBuffer ? source.toString('utf8') : source == null ? '' : String(source)
-  }
-
-  if (type === 'jsonb' || type === 'json') {
-    return JSON.parse(isBuffer ? source.toString('utf8') : source)
-  }
-
-  throw new Error('cannot serialize unknown data type:' + type)
+  const fn = util.serialize[type]
+  if (!fn) throw new Error('unable to serialize unknown data type:' + type)
+  return fn(source)
 }
 
 util.deserialize = (type, source, asBuffer) => {
-  if (type === 'bytea') {
-    return asBuffer ? source : String(source || '')
-  }
-
-  if (type === 'text') {
-    return asBuffer ? source.toString('utf8') : source == null ? '' : String(source)
-  }
-
-  if (type === 'jsonb' || type === 'json') {
-    // TODO: id encoding to use as a pass through?
-    return JSON.stringify(asBuffer ? source.toString('utf8') : source)
-  }
-
-  throw new Error('cannot deserialize unknown data type:' + type)
+  const fn = util.deserialize[type]
+  if (!fn) throw new Error('unable to deserialize unknown data type:' + type)
+  return fn(source, asBuffer)
 }
+
+util.serialize.bytea = (source) => (
+  util.isBuffer(source) ? source : source == null ? '' : String(source)
+)
+
+util.serialize.text = (source) => (
+  util.isBuffer(source) ? source.toString('utf8') : source == null ? '' : String(source)
+)
+
+util.serialize.jsonb = util.serialize.json = (source) => (
+  JSON.parse(util.isBuffer(source) ? source.toString('utf8') : source)
+)
+
+util.deserialize.bytea = (source, asBuffer) => (
+  asBuffer ? source : String(source || '')
+)
+
+util.deserialize.text = (source, asBuffer) => (
+  asBuffer ? source.toString('utf8') : source == null ? '' : String(source)
+)
+
+util.deserialize.jsonb = util.deserialize.json = (source, asBuffer) => (
+  JSON.stringify(asBuffer ? source.toString('utf8') : source)
+)
 
 util.comparators = {
   eq: () => '=',
