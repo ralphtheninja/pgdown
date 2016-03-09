@@ -14,30 +14,30 @@ function PgChainedBatch (db) {
 
   AbstractChainedBatch.call(this, db)
 
-  // this._txWrap = util.createTransaction(db._pool, { autoRollback: false })
-  // this._tx = util.createTransaction(this._ctx)
+  // TODO: once queued batch exceeds some threshold create a temp table
+  // then flush batch ops to temp table periodically and clear ops
 }
 
 // PgChainedBatch.prototype._put = function (key, value) {
 //   debug_v('# PgChainedBatch _put (key = %j, value = %j)', key, value)
-//   this._tx.query(this._db._sql_put(), [ key, value ])
+//   TODO: send ops to temp table if passed buffer threshold
 // }
 
 // PgChainedBatch.prototype._del = function (key) {
 //   debug_v('# PgChainedBatch _del (key = %j)', key)
-//   this._tx.query(this._db._sql_del(), [ key ])
+//   TODO: send ops to temp table if passed buffer threshold
 // }
 
 // PgChainedBatch.prototype._clear = function () {
 //   debug('# PgChainedBatch _clear ()')
-//   // TODO: use autoRollback false on top level tx context
-//   // then roll back child tx and start fresh
+//   TODO: drop temp table, if any
 // }
 
 PgChainedBatch.prototype._write = function (cb) {
   debug('# PgChainedBatch _write (cb)')
 
-  const tx = util.createTransaction(this._db._pool)
+  const tx = util.createTransaction(this._db._pool, cb)
+
   this._operations.forEach((op) => {
     if (op.type === 'put') {
       tx.query(this._db._sql_put(), [ op.key, op.value ])
@@ -48,5 +48,5 @@ PgChainedBatch.prototype._write = function (cb) {
     }
   })
 
-  tx.commit((err) => cb(err || null))
+  tx.commit()
 }

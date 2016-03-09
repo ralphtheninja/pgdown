@@ -195,7 +195,8 @@ proto._del = function (key, options, cb) {
 }
 
 proto._batch = function (ops, options, cb) {
-  const tx = util.createTransaction(this._pool)
+  debug('## _batch (ops = Array[%s], options = %j, cb)', ops.length, options)
+  const tx = util.createTransaction(this._pool, cb)
 
   ops.forEach((op) => {
     // TODO: merge op.options with batch options?
@@ -208,7 +209,7 @@ proto._batch = function (ops, options, cb) {
     }
   })
 
-  tx.commit((err) => cb(err || null))
+  tx.commit()
 }
 
 proto._chainedBatch = function () {

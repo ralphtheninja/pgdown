@@ -7,8 +7,6 @@ const common = require('./_common')
 const destroy = require('../').destroy
 
 test('utf8 keyEncoding, json valueEncoding', (t) => {
-  t.timeoutAfter(2000)
-
   const db = levelup(common.location(), {
     db: common.db,
     keyEncoding: 'utf8',
@@ -191,7 +189,7 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
 
     t.test('string values', (t) => {
       t.test('long string', (t) => {
-        const k = 'true'
+        const k = 'long string'
         const v = Array.apply(null, Array(1000)).map(() => 'Hello there.\r\n').join('')
         db.put(k, v, (err) => {
           if (err) return t.end(err)
@@ -203,8 +201,8 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
         })
       })
 
-      t.test('string with weird char (\\x01)', (t) => {
-        const k = 'weird value'
+      t.test('control char (\\x01)', (t) => {
+        const k = 'control \\x01'
         const v = 'weird \x01 char'
         db.put(k, v, (err) => {
           if (err) return t.end(err)
@@ -216,8 +214,8 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
         })
       })
 
-      t.test('string with weird char (\\uffff)', (t) => {
-        const k = 'weird value'
+      t.test('control char (\\uffff)', (t) => {
+        const k = 'control \\uffff'
         const v = 'weird \uffff char'
         db.put(k, v, (err) => {
           if (err) return t.end(err)
@@ -229,7 +227,7 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
         })
       })
 
-      t.test('string with nullish surrogate pair', (t) => {
+      t.test('surrogate pair', (t) => {
         const k = 'surrogate pair'
         const v = 'pair \xc0\x80'
         db.put(k, v, (err) => {
@@ -242,16 +240,20 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
         })
       })
 
-      t.skip('string with null byte', (t) => {
+      t.test('string with null byte', (t) => {
         const k = 'null byte'
         const v = 'null \0 byte'
         db.put(k, v, (err) => {
-          if (err) return t.end(err)
-          db.get(k, (err, value) => {
-            if (err) return t.end(err)
-            t.equal(value, v, 'correct value')
-            t.end()
-          })
+          // TODO: escape null bytes in text/jsonb string values
+          t.ok(err, 'null bytes in json values error for now')
+          t.end()
+
+          // if (err) return t.end(err)
+          // db.get(k, (err, value) => {
+          //   if (err) return t.end(err)
+          //   t.equal(value, v, 'correct value')
+          //   t.end()
+          // })
         })
       })
     })
@@ -353,8 +355,8 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
     })
   })
 
-  t.test('abnormal bytes in keys/values', (t) => {
-    t.test('key with null byte', (t) => {
+  t.test('abnormal keys', (t) => {
+    t.test('null byte', (t) => {
       const k = 'null\x00key'
       db.put(k, 'val', (err) => {
         if (err) return t.end(err)
@@ -366,7 +368,7 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
       })
     })
 
-    t.test('key with weird char (\\x01)', (t) => {
+    t.test('control char (\\x01)', (t) => {
       const k = 'weird\x01key'
       db.put(k, 'val', (err) => {
         if (err) return t.end(err)
@@ -378,7 +380,7 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
       })
     })
 
-    t.test('key with weird char (\\xff)', (t) => {
+    t.test('control char (\\xff)', (t) => {
       const k = 'weird\xffkey'
       db.put(k, 'val', (err) => {
         if (err) return t.end(err)
@@ -390,7 +392,7 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
       })
     })
 
-    t.test('key with weird char (\\uffff)', (t) => {
+    t.test('control char (\\uffff)', (t) => {
       const k = 'weird\uffffkey'
       db.put(k, 'val', (err) => {
         if (err) return t.end(err)

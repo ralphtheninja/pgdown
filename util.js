@@ -8,7 +8,7 @@ const pg = require('pg')
 const Cursor = require('pg-cursor')
 const Postgres = require('any-db-postgres')
 const ConnectionPool = require('any-db-pool')
-const transaction = require('any-db-transaction')
+const beginTransaction = require('any-db-transaction')
 const errors = require('level-errors')
 
 util.escape = require('pg-format')
@@ -78,43 +78,16 @@ util.NotFoundError = errors.NotFoundError
 util.createPool = (config) => {
   config.name = mts()
   const pool = new ConnectionPool(Postgres, config, util.POOL_CONFIG)
-
-  // const _query = pool.query
-  // pool.query = function (text, params) {
-  //   console.warn('SQL:', text, params)
-  //   const query = _query.apply(this, arguments)
-  //   query.on('error', (err) => console.error('QUERY ERR:', err))
-  //   return query
-  // }
-
-  // pool.__clients = []
-  // pool.on('acquire', (client) => {
-  //   pool.__clients.push(client)
-  // })
-  // pool.on('release', (client) => {
-  //   pool.__clients = pool.__clients.filter((c) => c !== client)
-  // })
-
   return pool
 }
 
 util.destroyPool = (pool, cb) => {
   pool.close(cb)
-  // pool.close((err) => {
-  //   if (pool.__clients.length) {
-  //     pool.__clients.forEach((client) => pool.destroy(client))
-  //     cb(new Error('dangling clients: ' + pool.__clients.length))
-  //   } else {
-  //     cb(err)
-  //   }
-  // })
 }
 
-util.createTransaction = (client) => {
-  const tx = transaction(client)
-  tx.on('error', (err) => {
-    console.warn('TX ERR', err)
-  })
+util.createTransaction = (pool, cb) => {
+  const tx = beginTransaction(pool)
+  if (cb) tx.once('error', cb).once('commit:complete', cb)
   return tx
 }
 
@@ -122,7 +95,7 @@ util.createCursor = (db, statement) => {
   const client = Postgres.createConnection(db._config)
   const cursor = client.query(new Cursor(statement.text, statement.values))
 
-  client.on('error', (err) => {
+  client.once('error', (err) => {
     console.warn('CURSOR ERR:', err)
     client.close()
   })
@@ -206,7 +179,7 @@ util.parseLocation = (location) => {
 util.dropTable = (location, cb) => {
   const config = util.parseLocation(location)
   const client = Postgres.createConnection(config)
-  client.on('error', (err) => destroyClient(err, client, cb))
+  client.once('error', (err) => destroyClient(err, client, cb))
   client.query(`DROP TABLE IF EXISTS ${config._relation}`, (err) => {
     destroyClient(err, client, cb)
   })
