@@ -23,5 +23,5 @@ const suites = {
 }
 
 Object.keys(suites).forEach((name) => {
-  suites[name](common.factory, test, common, buffer)
+  suites[name](common.db, test, common, buffer)
 })

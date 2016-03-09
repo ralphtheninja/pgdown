@@ -8,7 +8,7 @@ const destroy = require('../').destroy
 
 test('utf8 keyEncoding, json valueEncoding', (t) => {
   const db = levelup(common.location(), {
-    db: common.factory,
+    db: common.db,
     keyEncoding: 'utf8',
     valueEncoding: 'json'
   })
@@ -23,9 +23,8 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
   t.test('open', (t) => {
     db.open((err) => {
       if (err) return t.end(err)
-
-      t.equal(db.db._keyDataType, 'text', 'text from utf8 keyEncoding')
-      t.equal(db.db._valueDataType, 'jsonb', 'jsonb from json valueEncoding')
+      t.equal(db.db._keyColumnType, 'bytea', 'bytea regardless of key encoding')
+      t.equal(db.db._valueColumnType, 'jsonb', 'jsonb for json value encoding')
       t.end()
     })
   })
@@ -144,10 +143,10 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
 
   t.skip('key with null byte', (t) => {
     const v = 'value for key with null byte'
-    db.put('null\0', v, (err) => {
+    db.put('null\0k', v, (err) => {
       if (err) return t.end(err)
 
-      db.get('null\0', (err, value) => {
+      db.get('null\0k', (err, value) => {
         if (err) return t.end(err)
         t.deepEqual(value, v, 'value for key with null byte')
         t.end()

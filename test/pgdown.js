@@ -2,17 +2,17 @@
 
 const test = require('tape')
 const common = require('./_common')
-const PgDOWN = common.factory
+const PgDOWN = common.db
 
 test('constructor', (t) => {
   t.test('defaults', (t) => {
     const db = PgDOWN(common.location())
     const config = db._config
     t.equal(config.database, common.PG_DEFAULTS.database, 'uses default database')
-    t.equal(config._tableName.indexOf(common.PREFIX), 0, 'uses test table prefix')
-    t.equal(config._schemaName, common.SCHEMA, 0, 'uses test schema')
-    t.ok(config._relName.indexOf(config._schemaName) >= 0, 'relation name includes schema')
-    t.ok(config._relName.indexOf(config._tableName) >= 0, 'relation name name includes table')
+    t.equal(config._table.indexOf(common.escape.ident(common.PREFIX)), 0, 'uses test table prefix')
+    t.equal(config._schema, common.escape.ident(common.SCHEMA), 0, 'uses test schema')
+    t.equal(config._relation.indexOf(config._schema), 0, 'rel name begins with schema')
+    t.ok(config._relation.indexOf(config._table) >= 0, 'rel name includes table')
     t.end()
   })
 })
@@ -21,16 +21,25 @@ test('open', (t) => {
   t.test('empty location', (t) => {
     t.throws(() => PgDOWN(), 'location required')
     t.throws(() => new PgDOWN(), 'location required')
+    t.throws(() => new PgDOWN(''), 'location required')
     t.end()
   })
 
-  t.test('malformed db name', (t) => {
+  t.test('throw on malformed db name', (t) => {
     const database = 'pg_invalid_db__'
     const loc = common.location('/' + database + '/' + common.PREFIX)
     const db = PgDOWN(loc)
     t.equal(db._config.database, database, 'db name set')
     t.equal(db.location.indexOf(loc), 0, 'location set')
 
+    db.open((err) => {
+      t.ok(err, 'error on open')
+      db.close(t.end)
+    })
+  })
+
+  t.test('error on illegal table name (null byte)', (t) => {
+    const db = PgDOWN('illegal_\x00_table')
     db.open((err) => {
       t.ok(err, 'error on open')
       db.close(t.end)
@@ -45,24 +54,31 @@ test('open', (t) => {
     })
   })
 
-  t.test('weird table name', (t) => {
-    const db = PgDOWN(common.location('malformed_\x01_table'))
+  t.test('weird table name (0x01 byte)', (t) => {
+    const db = PgDOWN(common.location('weird_\x01_table'))
     db.open((err) => {
       if (err) return t.end(err)
       db.close(t.end)
     })
   })
 
-  // TODO: catch null bytes at query time
-  t.skip('malformed table name with null byte', (t) => {
-    const db = PgDOWN(common.location('malformed_\x00_table'))
+  t.test('weird table name (0xfe byte)', (t) => {
+    const db = PgDOWN(common.location('weird_\xfe_table'))
     db.open((err) => {
-      t.ok(err, 'error on open')
+      if (err) return t.end(err)
       db.close(t.end)
     })
   })
 
-  t.test('no create if missing', (t) => {
+  t.test('weird table name (empty quoted string)', (t) => {
+    const db = PgDOWN(common.location('""'))
+    db.open((err) => {
+      if (err) return t.end(err)
+      db.close(t.end)
+    })
+  })
+
+  t.test('error for create if missing', (t) => {
     const loc = common.location()
     const opts = { createIfMissing: false }
 

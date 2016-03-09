@@ -22,41 +22,41 @@ function PgDOWN (location) {
   this._config = util.parseLocation(location)
   debug('pg config: %j', this._config)
 
-  const relName = this._config._relName
+  const relation = this._config._relation
 
-  this._sql_insert = `INSERT INTO ${relName} (key,value) VALUES($1,$2)`
-  this._sql_update = `UPDATE ${relName} SET value=($2) WHERE key=($1)`
+  this._sql_insert = `INSERT INTO ${relation} (key,value) VALUES($1,$2)`
+  this._sql_update = `UPDATE ${relation} SET value=($2) WHERE key=($1)`
 
-  this._sql_get = `SELECT value FROM ${relName} WHERE (key)=$1`
+  this._sql_get = `SELECT value FROM ${relation} WHERE (key)=$1`
   this._sql_put = this._sql_insert + ' ON CONFLICT (key) DO UPDATE SET value=excluded.value'
-  this._sql_del = `DELETE FROM ${relName} WHERE (key) = $1`
+  this._sql_del = `DELETE FROM ${relation} WHERE (key) = $1`
 }
 
 const proto = PgDOWN.prototype
 
+// NB: keys should *always* be stored using 'bytea'
+proto._keyColumnType = 'bytea'
+proto._valueColumnType = 'bytea'
+
 proto._serializeKey = function (key) {
   debug_v('## _serializeKey (key = %j)', key)
-  return util.serialize(this._keyDataType, key)
+  return util.serialize(this._keyColumnType, key)
 }
 
 proto._serializeValue = function (value) {
   debug_v('## _serializeValue (value = %j)', value)
-  return util.serialize(this._valueDataType, value)
+  return util.serialize(this._valueColumnType, value)
 }
 
 proto._deserializeKey = function (key, asBuffer) {
   debug_v('## _deserializeKey (key = %j, asBuffer = %j)', key)
-  return util.deserialize(this._keyDataType, key, asBuffer)
+  return util.deserialize(this._keyColumnType, key, asBuffer)
 }
 
 proto._deserializeValue = function (value, asBuffer) {
   debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
-  return util.deserialize(this._valueDataType, value, asBuffer)
+  return util.deserialize(this._valueColumnType, value, asBuffer)
 }
-
-proto._keyDataType = 'bytea'
-
-proto._valueDataType = 'bytea'
 
 proto._open = function (options, cb) {
   debug('## _open (options = %j, cb)', options)
@@ -68,42 +68,35 @@ proto._open = function (options, cb) {
   const errorIfExists = options.errorIfExists
   const IF_NOT_EXISTS = errorIfExists ? '' : 'IF NOT EXISTS'
 
-  const schemaName = config._schemaName
-  const tableName = config._tableName
-  const relName = config._relName
+  const schema = config._schema
+  const table = config._table
+  const relation = config._relation
 
-  // TODO: move to helper methods
-  const kEnc = options.keyEncoding
-  if (kEnc === 'utf8') {
-    this._keyDataType = 'text'
-  } else if (kEnc === 'json') {
-    this._keyDataType = 'jsonb'
+  // TODO: move to helper, support custom encoding objects
+  const encoding = options.valueEncoding
+  if (encoding === 'utf8') {
+    this._valueColumnType = 'text'
+  } else if (encoding === 'json') {
+    this._valueColumnType = 'jsonb'
   }
 
-  const vEnc = options.valueEncoding
-  if (vEnc === 'utf8') {
-    this._valueDataType = 'text'
-  } else if (vEnc === 'json') {
-    this._valueDataType = 'jsonb'
-  }
-
-  debug('column types: key %j, value %j', this._keyDataType, this._valueDataType)
+  debug('column types: key %j, value %j', this._keyColumnType, this._valueColumnType)
 
   // always create pgdown schema
   pool.query(`
-    CREATE SCHEMA IF NOT EXISTS ${util.escapeIdentifier(schemaName)}
+    CREATE SCHEMA IF NOT EXISTS ${schema}
   `, (err) => err ? fail(err) : info())
 
   const info = () => {
     pool.query(`
       SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename=$2
-    `, [ schemaName, tableName ], (err, result) => {
+    `, [ schema, table ], (err, result) => {
       const exists = result && result.rowCount === 1
 
       if (errorIfExists && exists) {
-        err = new Error('table already exists: ' + tableName)
+        err = new Error('table already exists: ' + table)
       } else if (!createIfMissing && !exists) {
-        err = new Error('table does not exist: ' + tableName)
+        err = new Error('table does not exist: ' + table)
       }
 
       if (err) {
@@ -117,15 +110,14 @@ proto._open = function (options, cb) {
   }
 
   const create = () => {
-    // TODO: support for jsonb, bytea using serialize[Key|Value]
+    // TODO: use separate column names for different value types?
     pool.query(`
-      CREATE TABLE ${IF_NOT_EXISTS} ${relName} (
-        key ${this._keyDataType} PRIMARY KEY,
-        value ${this._valueDataType}
+      CREATE TABLE ${IF_NOT_EXISTS} ${relation} (
+        key ${this._keyColumnType} PRIMARY KEY,
+        value ${this._valueColumnType}
       )
     `, (err) => {
       debug('_open: query result %j', err)
-
       err ? fail(err) : cb()
     })
   }
@@ -133,7 +125,7 @@ proto._open = function (options, cb) {
   const fail = (err) => {
     this._pool = null
     util.destroyPool(pool, (err_) => {
-      if (err_) debug('failed to destroy pool on open err %j', err_)
+      if (err_) debug('failed to destroy pool on open failure %j', err_)
       cb(err)
     })
   }
@@ -171,13 +163,13 @@ proto._get = function (key, options, cb) {
 
 proto._put = function (key, value, options, cb) {
   debug('## _put (key = %j, value = %j, options = %j, cb)', key, value, options)
-  const batch = [{ type: 'put', key: key, value: value }]
+  const batch = [ { type: 'put', key: key, value: value } ]
   this._batch(batch, options, (err) => cb(err || null))
 }
 
 proto._del = function (key, options, cb) {
   debug('## _del (key = %j, options = %j, cb)', key, options)
-  const batch = [{ type: 'del', key: key }]
+  const batch = [ { type: 'del', key: key } ]
   this._batch(batch, options, (err) => cb(err || null))
 }
 
@@ -208,13 +200,14 @@ proto._iterator = function (options) {
   return new PgIterator(this, options)
 }
 
+// NB: represents exact compressed size?
 proto._approximateSize = function (start, end, cb) {
   const options = { start: start, end: end }
   // generate standard iterator sql and replace head clause
   const context = PgIterator._parseOptions(this, options)
 
-  const relName = this._config._relName
-  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${relName} as tbl`
+  const relation = this._config._relation
+  const head = `SELECT sum(pg_column_size(tbl)) as size FROM ${relation} as tbl`
   context.clauses.unshift(head)
   const text = context.clauses.join(' ')
 

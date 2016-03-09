@@ -1,13 +1,14 @@
 'use strict'
 
+const common = exports
+
 const after = require('after')
 const inherits = require('inherits')
 const util = require('../util')
 const PgDOWN = require('../')
 
-const common = exports
-
 common.PG_DEFAULTS = util.PG_DEFAULTS
+common.escape = util.escape
 
 common.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
 common.PG_DEFAULTS.idleTimeout = Number(process.env.PGDOWN_TEST_IDLE_TIMEOUT) || 2000
@@ -74,7 +75,7 @@ common.checkBatchSize = function (batch, size) {
 // hack db class to drop tables on first open, track open pools to close on end
 common.OPENED = []
 common.DROPPED = {}
-common.factory = TestPgDOWN
+common.db = TestPgDOWN
 
 inherits(TestPgDOWN, PgDOWN)
 function TestPgDOWN (location) {

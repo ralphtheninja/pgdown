@@ -18,9 +18,9 @@ function PgIterator (db, options) {
   this._valueAsBuffer = options.valueAsBuffer
 
   const statement = PgIterator._parseOptions(db, options)
-  const relName = db._config._relName
+  const relation = db._config._relation
   const head = `
-    SELECT key::${db._keyDataType}, value::${db._valueDataType} FROM ${relName}
+    SELECT key::${db._keyColumnType}, value::${db._valueColumnType} FROM ${relation}
   `
 
   statement.clauses.unshift(head)

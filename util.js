@@ -1,5 +1,7 @@
 'use strict'
 
+const util = exports
+
 const AbstractLevelDOWN = require('abstract-leveldown/abstract-leveldown')
 const mts = require('monotonic-timestamp')
 const pg = require('pg')
@@ -9,9 +11,7 @@ const ConnectionPool = require('any-db-pool')
 const transaction = require('any-db-transaction')
 const errors = require('level-errors')
 
-const util = exports
-
-util.escapeIdentifier = pg.Client.prototype.escapeIdentifier
+util.escape = require('pg-format')
 
 util.isBuffer = AbstractLevelDOWN.prototype._isBuffer
 
@@ -19,12 +19,6 @@ util.serialize = (type, source) => {
   const fn = util.serialize[type]
   if (!fn) throw new Error('unable to serialize unknown data type:' + type)
   return fn(source)
-}
-
-util.deserialize = (type, source, asBuffer) => {
-  const fn = util.deserialize[type]
-  if (!fn) throw new Error('unable to deserialize unknown data type:' + type)
-  return fn(source, asBuffer)
 }
 
 util.serialize.bytea = (source) => (
@@ -35,9 +29,15 @@ util.serialize.text = (source) => (
   util.isBuffer(source) ? source.toString('utf8') : source == null ? '' : String(source)
 )
 
-util.serialize.jsonb = util.serialize.json = (source) => (
+util.serialize.jsonb = (source) => (
   JSON.parse(util.isBuffer(source) ? source.toString('utf8') : source)
 )
+
+util.deserialize = (type, source, asBuffer) => {
+  const fn = util.deserialize[type]
+  if (!fn) throw new Error('unable to deserialize unknown data type:' + type)
+  return fn(source, asBuffer)
+}
 
 util.deserialize.bytea = (source, asBuffer) => (
   asBuffer ? source : String(source || '')
@@ -47,7 +47,7 @@ util.deserialize.text = (source, asBuffer) => (
   asBuffer ? source.toString('utf8') : source == null ? '' : String(source)
 )
 
-util.deserialize.jsonb = util.deserialize.json = (source, asBuffer) => (
+util.deserialize.jsonb = (source, asBuffer) => (
   JSON.stringify(asBuffer ? source.toString('utf8') : source)
 )
 
@@ -71,9 +71,10 @@ util.createPool = (config) => {
   const pool = new ConnectionPool(Postgres, config, util.POOL_CONFIG)
 
   // const _query = pool.query
-  // pool.query = function (text) {
-  //   console.warn('SQL:', text)
+  // pool.query = function (text, params) {
+  //   console.warn('SQL:', text, params)
   //   const query = _query.apply(this, arguments)
+  //   query.on('error', (err) => console.error('QUERY ERR:', err))
   //   return query
   // }
 
@@ -92,7 +93,7 @@ util.destroyPool = (pool, cb) => {
   pool.close(cb)
   // pool.close((err) => {
   //   if (pool.__clients.length) {
-  //     // pool.__clients.forEach((client) => pool.destroy(client))
+  //     pool.__clients.forEach((client) => pool.destroy(client))
   //     cb(new Error('dangling clients: ' + pool.__clients.length))
   //   } else {
   //     cb(err)
@@ -144,6 +145,7 @@ PG_DEFAULTS.user = process.env.PGUSER || pg.defaults.user
 PG_DEFAULTS.password = process.env.PGPASSWORD || pg.defaults.password
 PG_DEFAULTS.idleTimeout = pg.defaults.idleTimeoutMillis
 PG_DEFAULTS.reapInterval = pg.defaults.reapIntervalMillis
+PG_DEFAULTS.binary = false
 
 util.POOL_CONFIG = {
   min: 0,
@@ -174,16 +176,14 @@ util.parseLocation = (location) => {
   }
 
   // remaining components of location specifiy sublevel path/table name
-  config._tableName = parts.join('/')
-  if (!config._tableName) throw new Error('location must specify table name')
+  const tableName = parts.join('/')
+  if (!tableName) throw new Error('table name required')
 
-  config._schemaName = util.schemaName
-
-  const escapedSchemaName = util.escapeIdentifier(config._schemaName)
-  const escapedTableName = util.escapeIdentifier(config._tableName)
+  const table = config._table = util.escape.ident(tableName)
+  const schema = config._schema = util.escape.ident(util.schemaName)
 
   // set relation name using (assuming pgdown as schema name)
-  config._relName = escapedSchemaName + '.' + escapedTableName
+  config._relation = schema + '.' + table
 
   return config
 }
@@ -195,7 +195,7 @@ util.dropTable = (location, cb) => {
   const config = util.parseLocation(location)
   const client = Postgres.createConnection(config)
   client.on('error', (err) => destroyClient(err, client, cb))
-  client.query(`DROP TABLE IF EXISTS ${config._relName}`, (err) => {
+  client.query(`DROP TABLE IF EXISTS ${config._relation}`, (err) => {
     destroyClient(err, client, cb)
   })
 }
