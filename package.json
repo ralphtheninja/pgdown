@@ -5,7 +5,7 @@
   "main": "pgdown.js",
   "scripts": {
     "test": "PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test | faucet && npm run lint",
-    "test:debug": "DEBUG=pgdown:* node test",
+    "test:debug": "DEBUG=pgdown:* PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test",
     "lint": "standard",
     "nsp": "nsp check"
   },
