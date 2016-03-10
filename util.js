@@ -24,6 +24,26 @@ util.escape = require('pg-format')
 
 util.isBuffer = AbstractLevelDOWN.prototype._isBuffer
 
+// encode null bytes for text/jsonb types
+// TODO: this is absolute shit... but ought to get the job done for now
+// hard to believe postgres doesn't have *any* legit workaround for null bytes
+
+util.encodeText = (text) => (
+  text.replace(/\x01/g, '\x01\x7e').replace(/\x00/g, '\x01\x7d')
+)
+
+util.encodeJsonb = (text) => (
+  text.replace(/\\u0001/g, '\\u0001\x7e').replace(/\\u0000/g, '\\u0001\x7d')
+)
+
+util.decodeText = (text) => (
+  text.replace(/\x01\x7d/g, '\x00').replace(/\x01\x7e/g, '\x01')
+)
+
+util.decodeJsonb = (text) => (
+  text.replace(/\\u0001\x7d/g, '\\u0000').replace(/\\u0001\x7e/g, '\\u0001')
+)
+
 util.serialize = (type, source) => {
   const fn = util.serialize[type]
   if (!fn) throw new Error('unable to serialize unknown data type:' + type)
@@ -34,12 +54,12 @@ util.serialize.bytea = (source) => (
   util.isBuffer(source) ? source : new Buffer(source == null ? '' : String(source), 'utf8')
 )
 
-util.serialize.text = (source) => (
+util.serialize.text = (source) => util.encodeText(
   util.isBuffer(source) ? source.toString('utf8') : source == null ? '' : String(source)
 )
 
-util.serialize.jsonb = (source) => (
-  util.isBuffer(source) ? source.toString('utf8') : source == null ? null : String(source)
+util.serialize.jsonb = (source) => util.encodeJsonb(
+  util.isBuffer(source) ? source.toString('utf8') : source == null ? 'null' : String(source)
 )
 
 util.deserialize = (type, source, asBuffer) => {
@@ -48,15 +68,15 @@ util.deserialize = (type, source, asBuffer) => {
   return fn(source, asBuffer)
 }
 
-util.deserialize.bytea = (source, asBuffer) => (
-  asBuffer ? source : String(source || '')
-)
+util.deserialize.bytea = (source, asBuffer) => {
+  return asBuffer ? source : String(source || '')
+}
 
-util.deserialize.text = (source, asBuffer) => (
+util.deserialize.text = (source, asBuffer) => util.decodeText(
   asBuffer ? source.toString('utf8') : source == null ? '' : String(source)
 )
 
-util.deserialize.jsonb = (source, asBuffer) => (
+util.deserialize.jsonb = (source, asBuffer) => util.decodeJsonb(
   JSON.stringify(asBuffer ? source.toString('utf8') : source)
 )
 
