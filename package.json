@@ -15,7 +15,10 @@
     "postgres",
     "db"
   ],
-  "author": "Lars-Magnus Skog <ralphtheninja@riseup.net>",
+  "contributors": [
+    "Dean Landolt <dean@deanlandolt.com>",
+    "Lars-Magnus Skog <ralphtheninja@riseup.net>"
+  ],
   "license": "MIT",
   "repository": "ralphtheninja/pgdown",
   "bugs": {
