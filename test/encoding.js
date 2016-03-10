@@ -188,35 +188,20 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
     })
 
     t.test('string values', (t) => {
+      t.test('empty string', (t) => {
+        const k = 'empty string'
+        db.put(k, '', (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, '', 'correct value')
+            t.end()
+          })
+        })
+      })
       t.test('long string', (t) => {
         const k = 'long string'
-        const v = Array.apply(null, Array(1000)).map(() => 'Hello there.\r\n').join('')
-        db.put(k, v, (err) => {
-          if (err) return t.end(err)
-          db.get(k, (err, value) => {
-            if (err) return t.end(err)
-            t.equal(value, v, 'correct value')
-            t.end()
-          })
-        })
-      })
-
-      t.test('control char (\\x01)', (t) => {
-        const k = 'control \\x01'
-        const v = 'weird \x01 char'
-        db.put(k, v, (err) => {
-          if (err) return t.end(err)
-          db.get(k, (err, value) => {
-            if (err) return t.end(err)
-            t.equal(value, v, 'correct value')
-            t.end()
-          })
-        })
-      })
-
-      t.test('control char (\\uffff)', (t) => {
-        const k = 'control \\uffff'
-        const v = 'weird \uffff char'
+        const v = Array.apply(null, Array(100000)).map(() => 'Hello there.\r\n').join('')
         db.put(k, v, (err) => {
           if (err) return t.end(err)
           db.get(k, (err, value) => {
@@ -240,9 +225,22 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
         })
       })
 
-      t.test('string with null byte', (t) => {
-        const k = 'null byte'
-        const v = 'null \0 byte'
+      t.test('string with control chars', (t) => {
+        const k = 'null char'
+        const v = 'control chars: "\x01\x02\xff\xfe\x80\x7f\uffff"'
+        db.put(k, v, (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.equal(value, v, 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('string with null char', (t) => {
+        const k = 'null char'
+        const v = 'null \x00 char'
         db.put(k, v, (err) => {
           // TODO: escape null bytes in text/jsonb string values
           t.ok(err, 'null bytes in json values error for now')
@@ -328,7 +326,19 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
 
     t.test('array values', (t) => {
       t.test('long array', (t) => {
-        const k = 'true'
+        const k = 'empty array'
+        db.put(k, [], (err) => {
+          if (err) return t.end(err)
+          db.get(k, (err, value) => {
+            if (err) return t.end(err)
+            t.deepEqual(value, [], 'correct value')
+            t.end()
+          })
+        })
+      })
+
+      t.test('empty array', (t) => {
+        const k = 'empty array'
         const v = Array.apply(null, Array(1000)).map(() => 'Hello there.\r\n')
         db.put(k, v, (err) => {
           if (err) return t.end(err)
@@ -342,7 +352,7 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
 
       t.test('mixed array', (t) => {
         const k = 'mixed array'
-        const v = [ 'foo', 123, [], { str: 'true' } ]
+        const v = [ 'foo', 123, [ {}, { foo: { '0': null } } ] ]
         db.put(k, v, (err) => {
           if (err) return t.end(err)
           db.get(k, (err, value) => {
