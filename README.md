@@ -10,11 +10,11 @@ Use together with [`levelup`](https://github.com/Level/levelup) to get a `Postgr
 
 ```js
 const levelup = require('levelup')
-const pgdown = require('pgdown')
+const PgDOWN = require('pgdown')
 
 const uri = 'postgres://postgres:@localhost:5432/postgres'
 const db = levelup(uri, {
-  db: pgdown,
+  db: PgDOWN,
   keyEncoding: 'utf8',
   valueEncoding: 'json'
 })
@@ -28,7 +28,11 @@ db.put('foo', { bar: 'baz' }, (err) => {
 
 ## Api
 
-#### `pgdown(location)`
+#### `const PgDOWN = require('pgdown')`
+
+Constructor.
+
+#### `const down = PgDOWN(location)`
 
 Creates a `PgDOWN` object with `location` which can take the following forms:
 
