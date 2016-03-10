@@ -1,5 +1,8 @@
-// TODO require conditionally for node 0.10 and 0.12
-require('babel-register')
+var major = process.version.slice(1).split('.').shift()
+
+if (major < 4) {
+  require('babel-register')
+}
 
 require('./pgdown')
 require('./encoding')
