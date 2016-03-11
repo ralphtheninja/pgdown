@@ -32,7 +32,7 @@ util.encodeText = (text) => (
   text.replace(/\x01/g, '\x01\x7e').replace(/\x00/g, '\x01\x7d')
 )
 
-util.encodeJsonb = (text) => (
+util.encodeJson = (text) => (
   text.replace(/\\u0001/g, '\\u0001\x7e').replace(/\\u0000/g, '\\u0001\x7d')
 )
 
@@ -40,7 +40,7 @@ util.decodeText = (text) => (
   text.replace(/\x01\x7d/g, '\x00').replace(/\x01\x7e/g, '\x01')
 )
 
-util.decodeJsonb = (text) => (
+util.decodeJson = (text) => (
   text.replace(/\\u0001\x7d/g, '\\u0000').replace(/\\u0001\x7e/g, '\\u0001')
 )
 
@@ -58,7 +58,7 @@ util.serialize.text = (source) => util.encodeText(
   util.isBuffer(source) ? source.toString('utf8') : source == null ? '' : String(source)
 )
 
-util.serialize.jsonb = (source) => util.encodeJsonb(
+util.serialize.json = util.serialize.jsonb = (source) => util.encodeJson(
   util.isBuffer(source) ? source.toString('utf8') : source == null ? 'null' : String(source)
 )
 
@@ -76,7 +76,7 @@ util.deserialize.text = (source, asBuffer) => util.decodeText(
   asBuffer ? source.toString('utf8') : source == null ? '' : String(source)
 )
 
-util.deserialize.jsonb = (source, asBuffer) => util.decodeJsonb(
+util.deserialize.json = util.deserialize.jsonb = (source, asBuffer) => util.decodeJson(
   JSON.stringify(asBuffer ? source.toString('utf8') : source)
 )
 
@@ -197,6 +197,8 @@ util.parseLocation = (location) => {
 // https://github.com/olalonde/pgtools/blob/master/index.js
 
 util.dropTable = (location, cb) => {
+  // TODO: should try to use shared pool for location if one exists
+  // probably merits a createConnection helper
   const config = util.parseLocation(location)
   const client = Postgres.createConnection(config)
   client.once('error', (err) => destroyClient(err, client, cb))

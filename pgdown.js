@@ -84,6 +84,7 @@ proto._open = function (options, cb) {
 
   const config = this._config
   const pool = this._pool = util.createPool(config)
+  // TODO: make pool init async, do create schema if not exists dance just once
 
   const createIfMissing = options.createIfMissing
   const errorIfExists = options.errorIfExists
@@ -92,14 +93,6 @@ proto._open = function (options, cb) {
   const schema = config._schema
   const table = config._table
   const relation = config._relation
-
-  // TODO: move to helper, support custom encoding objects
-  const encoding = options.valueEncoding
-  if (encoding === 'utf8') {
-    this._valueColumnType = 'text'
-  } else if (encoding === 'json') {
-    this._valueColumnType = 'jsonb'
-  }
 
   debug('column types: key %j, value %j', this._keyColumnType, this._valueColumnType)
 
@@ -110,7 +103,7 @@ proto._open = function (options, cb) {
 
   const info = () => {
     pool.query(`
-      SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename=$2
+      SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname=$1 AND tablename=$2
     `, [ schema, table ], (err, result) => {
       const exists = result && result.rowCount === 1
 

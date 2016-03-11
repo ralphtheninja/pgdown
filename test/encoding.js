@@ -7,12 +7,40 @@ const common = require('./_common')
 const destroy = require('../').destroy
 
 test('utf8 keyEncoding, json valueEncoding', (t) => {
-  const db = levelup(common.location(), {
-    db: common.db,
-    keyEncoding: 'utf8',
-    valueEncoding: 'json'
+  t.test('bytea keys, bytea values', (t) => {
+    const db = levelup(common.location(), {
+      db: common.db,
+      keyEncoding: 'utf8',
+      valueEncoding: 'json'
+    })
+    db._keyColumnType = 'text'
+    testEncodings(db, t)
   })
 
+  t.test('text keys, jsonb values', (t) => {
+    const db = levelup(common.location(), {
+      db: common.db,
+      keyEncoding: 'utf8',
+      valueEncoding: 'json'
+    })
+    db._keyColumnType = 'text'
+    db._valueColumnType = 'jsonb'
+    testEncodings(db, t)
+  })
+
+  t.test('jsonb keys, json values', (t) => {
+    const db = levelup(common.location(), {
+      db: common.db,
+      keyEncoding: 'utf8',
+      valueEncoding: 'json'
+    })
+    db._keyColumnType = 'jsonb'
+    db._valueColumnType = 'json'
+    testEncodings(db, t)
+  })
+})
+
+const testEncodings = (db, t) => {
   t.test('initialize', (t) => {
     destroy(db.location, (err) => {
       if (err) return t.end(err)
@@ -21,12 +49,7 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
   })
 
   t.test('open', (t) => {
-    db.open((err) => {
-      if (err) return t.end(err)
-      t.equal(db.db._keyColumnType, 'bytea', 'bytea regardless of key encoding')
-      t.equal(db.db._valueColumnType, 'jsonb', 'jsonb for json value encoding')
-      t.end()
-    })
+    db.open(t.end)
   })
 
   t.test('put', (t) => {
@@ -115,18 +138,6 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
       t.test('null value', (t) => {
         const k = 'null'
         db.put(k, null, (err) => {
-          if (err) return t.end(err)
-          db.get(k, (err, value) => {
-            if (err) return t.end(err)
-            t.equal(value, null, 'correct value')
-            t.end()
-          })
-        })
-      })
-
-      t.test('undefined value', (t) => {
-        const k = 'undefined'
-        db.put(k, undefined, (err) => {
           if (err) return t.end(err)
           db.get(k, (err, value) => {
             if (err) return t.end(err)
@@ -311,10 +322,6 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
         const k = 'null char'
         const v = 'chars: \x01\x00\x02\x00\x01\x0101\x00\u0000\x7e\x01\x7d\xfe'
         db.put(k, v, (err) => {
-          // // TODO: escape null bytes in text/jsonb string values
-          // t.ok(err, 'null bytes in json values error for now')
-          // t.end()
-
           if (err) return t.end(err)
           db.get(k, (err, value) => {
             if (err) return t.end(err)
@@ -362,6 +369,29 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
             t.end()
           })
         })
+      })
+    })
+
+    t.test('encoding failures', (t) => {
+      t.skip('undefined value', (t) => {
+        const k = 'undefined'
+        db.put(k, undefined, (err, result) => {
+          t.ok(err, 'fails to save')
+          db.get(k, (err, record) => {
+            t.ok(err && err.notFound, 'not found')
+            t.ok(record == null, 'no value returned')
+            t.end()
+          })
+        })
+      })
+
+      t.test('circular reference', (t) => {
+        const k = 'circular'
+        const v = { child: {} }
+        v.child.parent = v
+
+        t.throws(() => db.put(k, v, () => {}))
+        t.end()
       })
     })
   })
@@ -441,4 +471,6 @@ test('utf8 keyEncoding, json valueEncoding', (t) => {
       db.close(t.end)
     })
   })
-})
+
+  t.end()
+}
