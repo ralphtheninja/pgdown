@@ -10,7 +10,6 @@ const PgDOWN = require('../')
 common.escape = util.escape
 
 common.PG_DEFAULTS = util.PG_DEFAULTS
-common.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
 common.PG_DEFAULTS.idleTimeout = Number(process.env.PGDOWN_TEST_IDLE_TIMEOUT) || 5000
 common.PG_DEFAULTS.schema = process.env.PGDOWN_TEST_SCHEMA || 'pgdown_test'
 
