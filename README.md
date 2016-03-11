@@ -60,8 +60,7 @@ To summarize we have the following properties and their default values:
 If you're hacking on `pgdown` or just want to setup `PostgreSQL` locally the easiest way is probably to use docker. We can highly recommend [`clkao/postgres-plv8`](https://hub.docker.com/r/clkao/postgres-plv8/) which is based on the official `PostgreSQL` docker image but with support for [`plv8`](https://github.com/plv8/plv8).
 
 ```
-$ docker pull clkao/postgres-plv8:9.5
-$ docker run -d -p 5432:5432 -v /tmp/data:/var/lib/postgresql/data clkao/postgres-plv8:9.5
+$ docker run -d -p 5432:5432 clkao/postgres-plv8:9.5
 ```
 
 Check out the [wiki](https://github.com/ralphtheninja/pgdown/wiki/PostgreSQL-and-Docker) for more information.
