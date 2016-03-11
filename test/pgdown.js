@@ -9,8 +9,8 @@ test('constructor', (t) => {
     const db = PgDOWN(common.location())
     const config = db._config
     t.equal(config.database, common.PG_DEFAULTS.database, 'uses default database')
-    t.equal(config._table.indexOf(common.escape.ident(common.PREFIX)), 0, 'uses test table prefix')
-    t.equal(config._schema, common.escape.ident(common.SCHEMA), 0, 'uses test schema')
+    t.equal(config._table.indexOf(common.escape.ident(common.lastLocation())), 0, 'uses test location')
+    t.equal(config._schema, common.escape.ident(common.PG_DEFAULTS.schema), 0, 'uses default schema')
     t.equal(config._relation.indexOf(config._schema), 0, 'rel name begins with schema')
     t.ok(config._relation.indexOf(config._table) >= 0, 'rel name includes table')
     t.end()
@@ -27,7 +27,7 @@ test('open', (t) => {
 
   t.test('throw on malformed db name', (t) => {
     const database = 'pg_invalid_db__'
-    const loc = common.location('/' + database + '/' + common.PREFIX)
+    const loc = '/' + database + '/invalid_db_table'
     const db = PgDOWN(loc)
     t.equal(db._config.database, database, 'db name set')
     t.equal(db.location.indexOf(loc), 0, 'location set')

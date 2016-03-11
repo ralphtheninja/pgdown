@@ -7,22 +7,19 @@ const inherits = require('inherits')
 const util = require('../util')
 const PgDOWN = require('../')
 
-common.PG_DEFAULTS = util.PG_DEFAULTS
 common.escape = util.escape
 
+common.PG_DEFAULTS = util.PG_DEFAULTS
 common.PG_DEFAULTS.database = process.env.PGDOWN_TEST_DATABASE || 'postgres'
-common.PG_DEFAULTS.idleTimeout = Number(process.env.PGDOWN_TEST_IDLE_TIMEOUT) || 2000
-common.PREFIX = process.env.PGDOWN_TEST_PREFIX || 'table_'
-
-// use a distinct schema for tests
-common.SCHEMA = util.schemaName = process.env.PGDOWN_TEST_SCHEMA || 'pgdown_test'
+common.PG_DEFAULTS.idleTimeout = Number(process.env.PGDOWN_TEST_IDLE_TIMEOUT) || 5000
+common.PG_DEFAULTS.schema = process.env.PGDOWN_TEST_SCHEMA || 'pgdown_test'
 
 var _count = 0
 var _last
 
 common.lastLocation = () => _last
 
-common.location = (loc) => (_last = loc || (common.PREFIX + (++_count)))
+common.location = (loc) => (_last = loc || ('test_' + (++_count)))
 
 common.cleanup = (cb) => {
   const len = common.OPENED.length

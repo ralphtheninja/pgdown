@@ -149,6 +149,8 @@ PG_DEFAULTS.host = process.env.PGHOSTADDR || pg.defaults.host
 PG_DEFAULTS.port = Number(process.env.PGPORT) || pg.defaults.port
 PG_DEFAULTS.user = process.env.PGUSER || pg.defaults.user
 PG_DEFAULTS.password = process.env.PGPASSWORD || pg.defaults.password
+PG_DEFAULTS.application_name = process.env.PGAPPNAME
+PG_DEFAULTS.schema = 'pgdown'
 PG_DEFAULTS.idleTimeout = pg.defaults.idleTimeoutMillis
 PG_DEFAULTS.reapInterval = pg.defaults.reapIntervalMillis
 
@@ -160,9 +162,6 @@ util.POOL_CONFIG = {
   }
 }
 
-// TODO: move this into PgDOWN class
-util.schemaName = 'pgdown'
-
 util.parseLocation = (location) => {
   const config = {}
 
@@ -170,6 +169,9 @@ util.parseLocation = (location) => {
   for (var key in PG_DEFAULTS) {
     if (PG_DEFAULTS[key] !== undefined) config[key] = PG_DEFAULTS[key]
   }
+
+  // always set fallback application name
+  config.fallback_application_name = 'pgdown'
 
   // TODO: complete postgres:// uri parsing
   const parts = location.split('/')
@@ -184,10 +186,11 @@ util.parseLocation = (location) => {
   const tableName = parts.join('/')
   if (!tableName) throw new Error('table name required')
 
+  // TODO: refactor this crap away
   const table = config._table = util.escape.ident(tableName)
-  const schema = config._schema = util.escape.ident(util.schemaName)
+  const schema = config._schema = util.escape.ident(config.schema)
 
-  // set relation name using (assuming pgdown as schema name)
+  // set relation name (combination of schema and table name)
   config._relation = schema + '.' + table
 
   return config
