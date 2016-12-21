@@ -31,7 +31,7 @@
     "any-db-pool": "^2.1.0",
     "any-db-postgres": "^2.1.4",
     "any-db-transaction": "^2.2.2",
-    "debug": "^2.2.0",
+    "debug": "^2.5.0",
     "inherits": "^2.0.1",
     "level-errors": "^1.0.4",
     "monotonic-timestamp": "0.0.9",
