@@ -36,7 +36,7 @@
     "level-errors": "^1.0.4",
     "monotonic-timestamp": "0.0.9",
     "parse-db-url": "0.0.0",
-    "pg": "^4.5.1",
+    "pg": "^6.1.4",
     "pg-cursor": "^1.0.0",
     "pg-format": "^1.0.2"
   },
