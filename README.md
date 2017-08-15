@@ -1,5 +1,7 @@
 # pgdown [![Build Status](https://travis-ci.org/ralphtheninja/pgdown.svg?branch=master)](https://travis-ci.org/ralphtheninja/pgdown)
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/ralphtheninja/pgdown.svg)](https://greenkeeper.io/)
+
 **Experimental and WIP. Do not use.**
 
 [`PostgreSQL`](http://www.postgresql.org/) backed [`abstract-leveldown`](https://github.com/Level/abstract-leveldown).
