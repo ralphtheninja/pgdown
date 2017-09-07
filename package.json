@@ -38,7 +38,7 @@
     "parse-db-url": "0.0.0",
     "pg": "^7.1.2",
     "pg-cursor": "^1.0.0",
-    "pg-format": "^1.0.2"
+    "pg-format": "^1.0.4"
   },
   "devDependencies": {
     "after": "^0.8.1",
