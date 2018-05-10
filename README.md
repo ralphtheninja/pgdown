@@ -56,7 +56,7 @@ To summarize we have the following properties and their default values:
 
 ## ES6
 
-`pgdown` mainly uses arrow functions and template strings from ES6 which are very useful when constructing SQL query strings. It primarily targets node `4+` but should work well with `0.10` and `0.12` together with [`babel-register`](https://www.npmjs.com/package/babel-register) _or_ [`babel-cli`](https://www.npmjs.com/package/babel-cli/) and [`babel-preset-es2015`](https://www.npmjs.com/package/babel-preset-es2015).
+`pgdown` mainly uses arrow functions and template strings from ES6 which are very useful when constructing SQL query strings. It primarily targets node `6+` but should work well with `0.10` and `0.12` together with [`babel-register`](https://www.npmjs.com/package/babel-register) _or_ [`babel-cli`](https://www.npmjs.com/package/babel-cli/) and [`babel-preset-es2015`](https://www.npmjs.com/package/babel-preset-es2015).
 
 ## PostgreSQL
 
