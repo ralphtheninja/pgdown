@@ -2,8 +2,10 @@
 
 > [`PostgreSQL`](http://www.postgresql.org/) backed [`abstract-leveldown`](https://github.com/Level/abstract-leveldown).
 
+[![npm](https://img.shields.io/npm/v/pgdown.svg)](https://www.npmjs.com/package/pgdown)
+![Node version](https://img.shields.io/node/v/pgdown.svg)
 [![Build Status](https://travis-ci.org/ralphtheninja/pgdown.svg?branch=master)](https://travis-ci.org/ralphtheninja/pgdown)
-[![Greenkeeper badge](https://badges.greenkeeper.io/ralphtheninja/pgdown.svg)](https://greenkeeper.io/)
+[![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
 
 **Experimental and WIP. Do not use.**
 
