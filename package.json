@@ -33,7 +33,7 @@
     "any-db-transaction": "^2.2.2",
     "debug": "^3.0.0",
     "inherits": "^2.0.1",
-    "level-errors": "^1.0.4",
+    "level-errors": "^2.0.0",
     "monotonic-timestamp": "0.0.9",
     "parse-db-url": "0.0.0",
     "pg": "^7.1.2",
