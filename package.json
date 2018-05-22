@@ -26,7 +26,7 @@
   },
   "homepage": "https://github.com/ralphtheninja/pgdown#readme",
   "dependencies": {
-    "abstract-leveldown": "^4.0.3",
+    "abstract-leveldown": "^5.0.0",
     "any-db": "^2.1.0",
     "any-db-pool": "^2.1.0",
     "any-db-postgres": "^2.1.4",
