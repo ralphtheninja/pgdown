@@ -2,8 +2,10 @@
 
 > [`PostgreSQL`](http://www.postgresql.org/) backed [`abstract-leveldown`](https://github.com/Level/abstract-leveldown).
 
+[![npm](https://img.shields.io/npm/v/pgdown.svg)](https://www.npmjs.com/package/pgdown)
+![Node version](https://img.shields.io/node/v/pgdown.svg)
 [![Build Status](https://travis-ci.org/ralphtheninja/pgdown.svg?branch=master)](https://travis-ci.org/ralphtheninja/pgdown)
-[![Greenkeeper badge](https://badges.greenkeeper.io/ralphtheninja/pgdown.svg)](https://greenkeeper.io/)
+[![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
 
 **Experimental and WIP. Do not use.**
 
@@ -54,7 +56,7 @@ To summarize we have the following properties and their default values:
 
 ## ES6
 
-`pgdown` mainly uses arrow functions and template strings from ES6 which are very useful when constructing SQL query strings. It primarily targets node `4+` but should work well with `0.10` and `0.12` together with [`babel-register`](https://www.npmjs.com/package/babel-register) _or_ [`babel-cli`](https://www.npmjs.com/package/babel-cli/) and [`babel-preset-es2015`](https://www.npmjs.com/package/babel-preset-es2015).
+`pgdown` mainly uses arrow functions and template strings from ES6 which are very useful when constructing SQL query strings. It primarily targets node `6+` but should work well with `0.10` and `0.12` together with [`babel-register`](https://www.npmjs.com/package/babel-register) _or_ [`babel-cli`](https://www.npmjs.com/package/babel-cli/) and [`babel-preset-es2015`](https://www.npmjs.com/package/babel-preset-es2015).
 
 ## PostgreSQL
 
