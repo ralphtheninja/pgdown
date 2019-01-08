@@ -37,7 +37,7 @@
     "monotonic-timestamp": "0.0.9",
     "parse-db-url": "0.0.0",
     "pg": "^7.1.2",
-    "pg-cursor": "^1.0.0",
+    "pg-cursor": "^2.0.0",
     "pg-format": "^1.0.2"
   },
   "engines": {
