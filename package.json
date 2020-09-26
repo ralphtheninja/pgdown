@@ -6,8 +6,7 @@
   "scripts": {
     "test": "PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test | faucet && npm run lint",
     "test:debug": "DEBUG=pgdown:* PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test",
-    "lint": "standard",
-    "nsp": "nsp check"
+    "lint": "standard"
   },
   "keywords": [
     "level",
@@ -49,7 +48,6 @@
     "babel-register": "^6.6.5",
     "faucet": "0.0.1",
     "levelup": "^2.0.2",
-    "nsp": "^3.2.1",
     "standard": "^12.0.0",
     "tape": "^4.5.1"
   }
