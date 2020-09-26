@@ -31,9 +31,9 @@ PgChainedBatch.prototype._write = function (cb) {
 
   this._operations.forEach((op) => {
     if (op.type === 'put') {
-      tx.query(this._db._sql_put(), [ op.key, op.value ])
+      tx.query(this._db._sql_put(), [op.key, op.value])
     } else if (op.type === 'del') {
-      tx.query(this._db._sql_del(), [ op.key ])
+      tx.query(this._db._sql_del(), [op.key])
     }
   })
 

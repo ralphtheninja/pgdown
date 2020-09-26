@@ -123,14 +123,14 @@ const testEncodings = (db, t) => {
   t.test('read stream', (t) => {
     const data = []
     db.createReadStream()
-    .on('error', t.end)
-    .on('data', (d) => data.push(d))
-    .on('end', () => {
+      .on('error', t.end)
+      .on('data', (d) => data.push(d))
+      .on('end', () => {
       // add put op type to compare to sorted batch
-      data.forEach((d) => { d.type = 'put' })
-      t.deepEqual(data, sorted, 'all records in order')
-      t.end()
-    })
+        data.forEach((d) => { d.type = 'put' })
+        t.deepEqual(data, sorted, 'all records in order')
+        t.end()
+      })
   })
 
   t.test('non-object values', (t) => {
@@ -360,7 +360,7 @@ const testEncodings = (db, t) => {
 
       t.test('mixed array', (t) => {
         const k = 'mixed array'
-        const v = [ 'foo', 123, [ {}, { foo: { '0': null } } ] ]
+        const v = ['foo', 123, [{}, { foo: { 0: null } }]]
         db.put(k, v, (err) => {
           if (err) return t.end(err)
           db.get(k, (err, value) => {

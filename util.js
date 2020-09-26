@@ -123,7 +123,7 @@ util.createCursor = (db, statement) => {
   cursor.close = (cb) => {
     // NB: dirty hack to test the pool hanging issues... not working anyway...
     if (cursor.connection) {
-      cursor.connection.close({type: 'P'})
+      cursor.connection.close({ type: 'P' })
       cursor.connection.sync()
       cursor.state = 'done'
       cursor.connection.once('closeComplete', () => {

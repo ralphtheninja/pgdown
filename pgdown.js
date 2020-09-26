@@ -91,7 +91,7 @@ proto._open = function (options, cb) {
   const info = () => {
     pool.query(`
       SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname=$1 AND tablename=$2
-    `, [ schema, table ], (err, result) => {
+    `, [schema, table], (err, result) => {
       const exists = result && result.rowCount === 1
 
       if (errorIfExists && exists) {
@@ -141,7 +141,7 @@ proto._close = function (cb) {
 }
 
 proto._get = function (key, options, cb) {
-  this._pool.query(this._sql_get(), [ key ], (err, result) => {
+  this._pool.query(this._sql_get(), [key], (err, result) => {
     if (err) {
       cb(err)
     } else if (result.rowCount === 1) {
@@ -155,12 +155,12 @@ proto._get = function (key, options, cb) {
 }
 
 proto._put = function (key, value, options, cb) {
-  const batch = [ { type: 'put', key: key, value: value } ]
+  const batch = [{ type: 'put', key: key, value: value }]
   this._batch(batch, options, (err) => cb(err || null))
 }
 
 proto._del = function (key, options, cb) {
-  const batch = [ { type: 'del', key: key } ]
+  const batch = [{ type: 'del', key: key }]
   this._batch(batch, options, (err) => cb(err || null))
 }
 
@@ -170,9 +170,9 @@ proto._batch = function (ops, options, cb) {
   ops.forEach((op) => {
     // TODO: merge op.options with batch options?
     if (op.type === 'put') {
-      tx.query(this._sql_put(), [ op.key, op.value ])
+      tx.query(this._sql_put(), [op.key, op.value])
     } else if (op.type === 'del') {
-      tx.query(this._sql_del(), [ op.key ])
+      tx.query(this._sql_del(), [op.key])
     }
   })
 
