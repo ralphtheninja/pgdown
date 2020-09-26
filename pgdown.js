@@ -5,8 +5,6 @@ const AbstractLevelDOWN = require('abstract-leveldown/abstract-leveldown')
 const util = require('./util')
 const PgIterator = require('./pg-iterator')
 const PgChainedBatch = require('./pg-chained-batch')
-const debug = require('debug')('pgdown:info')
-const debug_v = require('debug')('pgdown:verbose')
 
 module.exports = PgDOWN
 
@@ -17,10 +15,7 @@ function PgDOWN (location) {
   }
 
   AbstractLevelDOWN.call(this, location)
-  debug('# new PgDOWN (location = %j)', location)
-
   this._config = util.parseLocation(location)
-  debug('pg config: %j', this._config)
 }
 
 const proto = PgDOWN.prototype
@@ -30,22 +25,18 @@ proto._keyColumnType = 'bytea'
 proto._valueColumnType = 'bytea'
 
 proto._serializeKey = function (key) {
-  debug_v('## _serializeKey (key = %j)', key)
   return util.serialize(this._keyColumnType, key)
 }
 
 proto._serializeValue = function (value) {
-  debug_v('## _serializeValue (value = %j)', value)
   return util.serialize(this._valueColumnType, value)
 }
 
 proto._deserializeKey = function (key, asBuffer) {
-  debug_v('## _deserializeKey (key = %j, asBuffer = %j)', key)
   return util.deserialize(this._keyColumnType, key, asBuffer)
 }
 
 proto._deserializeValue = function (value, asBuffer) {
-  debug_v('## _deserializeValue (value = %j, asBuffer = %j)', value)
   return util.deserialize(this._valueColumnType, value, asBuffer)
 }
 
@@ -80,8 +71,6 @@ proto._sql_put = function (key, value) {
 }
 
 proto._open = function (options, cb) {
-  debug('## _open (options = %j, cb)', options)
-
   const config = this._config
   const pool = this._pool = util.createPool(config)
   // TODO: make pool init async, do create schema if not exists dance just once
@@ -93,8 +82,6 @@ proto._open = function (options, cb) {
   const schema = config._schema
   const table = config._table
   const relation = config._relation
-
-  debug('column types: key %j, value %j', this._keyColumnType, this._valueColumnType)
 
   // always create pgdown schema
   pool.query(`
@@ -131,7 +118,6 @@ proto._open = function (options, cb) {
         value ${this._valueColumnType}
       )
     `, (err) => {
-      debug('_open: query result %j', err)
       err ? fail(err) : cb()
     })
   }
@@ -139,15 +125,12 @@ proto._open = function (options, cb) {
   const fail = (err) => {
     this._pool = null
     util.destroyPool(pool, (err_) => {
-      if (err_) debug('failed to destroy pool on open failure %j', err_)
       cb(err)
     })
   }
 }
 
 proto._close = function (cb) {
-  debug('## _close (cb)')
-
   const pool = this._pool
   if (pool) {
     this._pool = null
@@ -158,11 +141,7 @@ proto._close = function (cb) {
 }
 
 proto._get = function (key, options, cb) {
-  debug('## _get (key = %j, options = %j, cb)', key, options)
-
   this._pool.query(this._sql_get(), [ key ], (err, result) => {
-    debug('_get: query result %j %j', err, result)
-
     if (err) {
       cb(err)
     } else if (result.rowCount === 1) {
@@ -176,19 +155,16 @@ proto._get = function (key, options, cb) {
 }
 
 proto._put = function (key, value, options, cb) {
-  debug('## _put (key = %j, value = %j, options = %j, cb)', key, value, options)
   const batch = [ { type: 'put', key: key, value: value } ]
   this._batch(batch, options, (err) => cb(err || null))
 }
 
 proto._del = function (key, options, cb) {
-  debug('## _del (key = %j, options = %j, cb)', key, options)
   const batch = [ { type: 'del', key: key } ]
   this._batch(batch, options, (err) => cb(err || null))
 }
 
 proto._batch = function (ops, options, cb) {
-  debug('## _batch (ops = Array[%s], options = %j, cb)', ops.length, options)
   const tx = util.createTransaction(this._pool, cb)
 
   ops.forEach((op) => {
@@ -197,8 +173,6 @@ proto._batch = function (ops, options, cb) {
       tx.query(this._sql_put(), [ op.key, op.value ])
     } else if (op.type === 'del') {
       tx.query(this._sql_del(), [ op.key ])
-    } else {
-      debug('_batch: unknown batch operation %j', op)
     }
   })
 
@@ -206,12 +180,10 @@ proto._batch = function (ops, options, cb) {
 }
 
 proto._chainedBatch = function () {
-  debug('## _chainedBatch ()')
   return new PgChainedBatch(this)
 }
 
 proto._iterator = function (options) {
-  debug('## _iterator (options = %j)', options)
   return new PgIterator(this, options)
 }
 
@@ -227,7 +199,6 @@ proto._approximateSize = function (start, end, cb) {
   const text = context.clauses.join(' ')
 
   this._pool.query(text, context.values, (err, result) => {
-    debug('_approximateSize: query result %j %j', err, result)
     if (err) return cb(err)
 
     const size = result.rowCount && Number(result.rows[0].size)

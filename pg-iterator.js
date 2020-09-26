@@ -3,15 +3,11 @@
 const inherits = require('inherits')
 const AbstractIterator = require('abstract-leveldown/abstract-iterator')
 const util = require('./util')
-const debug = require('debug')('pgdown:info')
-const debug_v = require('debug')('pgdown:verbose')
 
 module.exports = PgIterator
 
 inherits(PgIterator, AbstractIterator)
 function PgIterator (db, options) {
-  debug('# new PgIterator (db, options = %j)', options)
-
   AbstractIterator.call(this, db)
 
   this._keyAsBuffer = options.keyAsBuffer
@@ -82,8 +78,6 @@ PgIterator._parseRange = function (db, range, context) {
 PgIterator.prototype._batchSize = 100
 
 PgIterator.prototype._next = function (cb) {
-  debug_v('# PgIterator _next (cb)')
-
   const nextRow = this._rows && this._rows.shift()
   if (nextRow) return this._send(nextRow, cb)
 
@@ -96,7 +90,6 @@ PgIterator.prototype._next = function (cb) {
 }
 
 PgIterator.prototype._end = function (cb) {
-  debug_v('# PgIterator _end (cb)')
   this._cursor.close(cb)
 }
 

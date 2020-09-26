@@ -5,7 +5,6 @@
   "main": "pgdown.js",
   "scripts": {
     "test": "PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test | faucet && npm run lint",
-    "test:debug": "DEBUG=pgdown:* PGDATABASE=${PGDATABASE:-postgres} PGUSER=${PGUSER:-postgres} tape test",
     "lint": "standard"
   },
   "keywords": [
@@ -30,7 +29,6 @@
     "any-db-pool": "^2.1.0",
     "any-db-postgres": "^2.1.4",
     "any-db-transaction": "^2.2.2",
-    "debug": "^4.0.0",
     "inherits": "^2.0.1",
     "level-errors": "^1.0.4",
     "monotonic-timestamp": "0.0.9",
